@@ -22,6 +22,7 @@ class Attendance(Entity[UUID]):
     student_id: UUID
     lesson_id: UUID
     status: AttendanceStatus
+    is_deleted: bool
     version: int
     created_by_provider: str
     created_by_external_user_id: str
@@ -48,6 +49,7 @@ class Attendance(Entity[UUID]):
             student_id=student_id,
             lesson_id=lesson_id,
             status=status,
+            is_deleted=False,
             version=1,
             created_by_provider=actor.provider.value,
             created_by_external_user_id=actor.external_user_id,
@@ -81,10 +83,11 @@ class Attendance(Entity[UUID]):
         now: datetime,
         reason: str,
     ) -> None:
-        if status is self.status:
+        if status is self.status and not self.is_deleted:
             return
         old_status = self.status
         self.status = status
+        self.is_deleted = False
         self.version += 1
         self.updated_by_provider = actor.provider.value
         self.updated_by_external_user_id = actor.external_user_id
@@ -98,5 +101,25 @@ class Attendance(Entity[UUID]):
                 actor=actor,
                 occurred_at=now,
                 reason=reason,
+            ),
+        )
+
+    def delete(self, *, actor: Actor, now: datetime) -> None:
+        if self.is_deleted:
+            return
+        self.is_deleted = True
+        self.version += 1
+        self.updated_by_provider = actor.provider.value
+        self.updated_by_external_user_id = actor.external_user_id
+        self.comment = "Отметка удалена"
+        self.updated_at = now
+        self._events.append(
+            AttendanceChanged(
+                attendance_id=self.id,
+                old_status=self.status,
+                new_status=self.status,
+                actor=actor,
+                occurred_at=now,
+                reason="Отметка удалена",
             ),
         )

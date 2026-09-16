@@ -77,6 +77,27 @@ class SafeGoogleSheetsGateway(GoogleSheetsGateway):
             value=value,
         )
 
+    async def read_attendance(self, *, sheet_name: str) -> dict[tuple[int, int], object]:
+        sheet = _quote_sheet_name(sheet_name)
+        first_column = _column_name(self._layout.student_first_column)
+        last_column = _column_name(self._layout.student_last_column)
+        values = await self._client.batch_get(
+            ranges=[
+                f"{sheet}!{first_column}{self._layout.attendance_first_row}:"
+                f"{last_column}{self._layout.attendance_last_row}",
+            ],
+        )
+        rows = values[0] if values else []
+        return {
+            (
+                self._layout.attendance_first_row + row_offset,
+                self._layout.student_first_column + col_offset,
+            ): value
+            for row_offset, row in enumerate(rows)
+            for col_offset, value in enumerate(row)
+            if value not in (None, "")
+        }
+
     def _validate_target(self, target: SheetCellTarget) -> None:
         if not self._layout.attendance_first_row <= target.row <= self._layout.attendance_last_row:
             raise ValueError("attendance row is outside the configured journal range")

@@ -1,0 +1,43 @@
+x-app: &app
+  build:
+    context: .
+  env_file:
+    - .env
+  environment:
+    DATABASE_URL: sqlite+aiosqlite:////data/attendance.db
+    BACKUP_DIR: /backups
+  volumes:
+    - ./runtime:/data
+    - ./backups:/backups
+    - ./secrets:/app/secrets:ro
+  init: true
+
+services:
+  migrate:
+    <<: *app
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+  bot:
+    <<: *app
+    command: ["python", "-m", "main"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "sync_worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  backup:
+    <<: *app
+    command: ["python", "-m", "backup", "--loop"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped

@@ -13,8 +13,9 @@ ACTIVE_STATUS = RegistrationStatus.APPROVED.value
 
 
 class SQLAlchemyRegistrationRepository:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, admin_telegram_ids: set[int] | None = None) -> None:
         self._session = session
+        self._admin_telegram_ids = admin_telegram_ids or set()
 
     async def list_available_students(self) -> list[StudentChoice]:
         active_account = exists().where(
@@ -31,13 +32,33 @@ class SQLAlchemyRegistrationRepository:
             for model in await self._session.scalars(statement)
         ]
 
+    async def list_active(self) -> list[RegistrationView]:
+        statement = (
+            select(ExternalAccountModel, StudentModel.full_name, StudentModel.subgroup)
+            .join(StudentModel, StudentModel.id == ExternalAccountModel.student_id)
+            .where(ExternalAccountModel.status == ACTIVE_STATUS)
+            .order_by(StudentModel.full_name)
+        )
+        result = []
+        for model, full_name, subgroup in await self._session.execute(statement):
+            provider = IdentityProvider(model.provider)
+            result.append(
+                _to_view(
+                    model,
+                    full_name,
+                    subgroup,
+                    await self.is_starosta(provider, model.external_user_id),
+                ),
+            )
+        return result
+
     async def get_active_by_external_id(
         self,
         provider: IdentityProvider,
         external_user_id: str,
     ) -> RegistrationView | None:
         statement = (
-            select(ExternalAccountModel, StudentModel.full_name)
+            select(ExternalAccountModel, StudentModel.full_name, StudentModel.subgroup)
             .join(StudentModel, StudentModel.id == ExternalAccountModel.student_id)
             .where(
                 ExternalAccountModel.provider == provider.value,
@@ -48,8 +69,13 @@ class SQLAlchemyRegistrationRepository:
         row = (await self._session.execute(statement)).one_or_none()
         if row is None:
             return None
-        model, full_name = row
-        return _to_view(model, full_name)
+        model, full_name, subgroup = row
+        return _to_view(
+            model,
+            full_name,
+            subgroup,
+            await self.is_starosta(provider, external_user_id),
+        )
 
     async def get(self, registration_id: UUID) -> Registration | None:
         model = await self._session.get(ExternalAccountModel, registration_id)
@@ -73,6 +99,12 @@ class SQLAlchemyRegistrationRepository:
         provider: IdentityProvider,
         external_user_id: str,
     ) -> bool:
+        if (
+            provider is IdentityProvider.TELEGRAM
+            and external_user_id.isdigit()
+            and int(external_user_id) in self._admin_telegram_ids
+        ):
+            return True
         statement = select(
             exists().where(
                 ExternalAccountModel.provider == provider.value,
@@ -111,13 +143,20 @@ class SQLAlchemyRegistrationRepository:
         await self._session.flush()
 
 
-def _to_view(model: ExternalAccountModel, full_name: str) -> RegistrationView:
+def _to_view(
+    model: ExternalAccountModel,
+    full_name: str,
+    subgroup: str,
+    is_starosta: bool,
+) -> RegistrationView:
     return RegistrationView(
         id=model.id,
         student_id=model.student_id,
         student_full_name=full_name,
+        student_subgroup=subgroup,
         provider=IdentityProvider(model.provider),
         external_user_id=model.external_user_id,
         username=model.username,
         status=RegistrationStatus(model.status),
+        is_starosta=is_starosta,
     )

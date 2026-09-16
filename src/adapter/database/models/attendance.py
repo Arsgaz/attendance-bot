@@ -2,6 +2,7 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -23,6 +24,7 @@ class AttendanceModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     student_id: Mapped[UUID] = mapped_column(ForeignKey("students.id", ondelete="RESTRICT"))
     lesson_id: Mapped[UUID] = mapped_column(ForeignKey("lessons.id", ondelete="RESTRICT"))
     status: Mapped[str] = mapped_column(String(16), nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_by_provider: Mapped[str] = mapped_column(String(16), nullable=False)
     created_by_external_user_id: Mapped[str] = mapped_column(String(128), nullable=False)

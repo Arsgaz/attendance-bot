@@ -9,12 +9,15 @@ from domain.common.exceptions import (
 )
 from domain.lesson.entity import Subgroup
 from domain.vo.attendance_status import AttendanceStatus
+from observability import get_logger
 from port.clock import Clock
 from port.id_generator import IdGenerator
 from port.repositories.attendance import AttendanceHistoryRepository, AttendanceRepository
 from port.repositories.lessons import LessonRepository
 from port.repositories.sheet_sync_queue import SheetSyncQueueRepository
 from port.unit_of_work import UnitOfWork
+
+logger = get_logger(__name__)
 
 
 class MarkAttendanceHandler:
@@ -53,10 +56,11 @@ class MarkAttendanceHandler:
             raise LessonNotAvailableForStudentError
 
         now = self._clock.now()
-        if await self._attendance.exists(
+        existing = await self._attendance.get_for_student_lesson(
             student_id=command.actor.student_id,
             lesson_id=command.lesson_id,
-        ):
+        )
+        if existing is not None and not existing.is_deleted:
             raise AttendanceAlreadyExistsError
 
         if command.status is AttendanceStatus.BONUS:
@@ -73,17 +77,30 @@ class MarkAttendanceHandler:
             )
             self._bonus_policy.ensure_eligible(approved=bonus_approved, used_count=used_count)
 
-        attendance_id = self._ids.new()
-        entity = Attendance.create(
-            attendance_id=attendance_id,
-            student_id=command.actor.student_id,
-            lesson_id=command.lesson_id,
-            status=command.status,
-            actor=command.actor,
-            now=now,
-        )
+        if existing is None:
+            attendance_id = self._ids.new()
+            entity = Attendance.create(
+                attendance_id=attendance_id,
+                student_id=command.actor.student_id,
+                lesson_id=command.lesson_id,
+                status=command.status,
+                actor=command.actor,
+                now=now,
+            )
+        else:
+            attendance_id = existing.id
+            entity = existing
+            entity.change_status(
+                status=command.status,
+                actor=command.actor,
+                now=now,
+                reason="Повторная отметка после удаления",
+            )
         try:
-            await self._attendance.add(entity)
+            if existing is None:
+                await self._attendance.add(entity)
+            else:
+                await self._attendance.save(entity)
             await self._history.add_all(entity.pull_events())
             await self._sync_queue.upsert(
                 attendance_id=attendance_id,
@@ -94,4 +111,12 @@ class MarkAttendanceHandler:
         except Exception:
             await self._uow.rollback()
             raise
+        logger.info(
+            "attendance_marked",
+            attendance_id=str(attendance_id),
+            student_id=str(command.actor.student_id),
+            lesson_id=str(command.lesson_id),
+            status=command.status.value,
+            version=entity.version,
+        )
         return MarkAttendanceResult(attendance_id=attendance_id, status=command.status)

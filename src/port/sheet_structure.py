@@ -19,6 +19,7 @@ class SheetLesson:
     subgroup: str
     sheet_row: int
     fingerprint: str
+    is_active: bool = True
 
 
 @dataclass(frozen=True, slots=True)

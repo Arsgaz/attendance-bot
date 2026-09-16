@@ -6,11 +6,19 @@ class AttendanceAlreadyExistsError(DomainError):
     pass
 
 
+class AttendanceNotFoundError(DomainError):
+    pass
+
+
 class BonusNotApprovedError(DomainError):
     pass
 
 
 class BonusLimitExceededError(DomainError):
+    pass
+
+
+class BonusRequestNotFoundError(DomainError):
     pass
 
 

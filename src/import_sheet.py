@@ -8,6 +8,9 @@ from adapter.database.uow import SQLAlchemyUnitOfWork
 from adapter.google_sheets import GoogleApiSheetsValuesClient, GoogleSheetLayout, GoogleSheetsStructureSource
 from application.import_sheet_structure import ImportSheetStructureHandler
 from config.settings import Settings
+from observability import configure_logging, get_logger
+
+logger = get_logger(__name__)
 
 
 async def run() -> None:
@@ -46,14 +49,20 @@ async def run() -> None:
                 uow=SQLAlchemyUnitOfWork(session),
                 clock=SystemClock(timezone),
             )()
-        print(
-            "Import completed: "
-            f"students +{result.students_created}/~{result.students_updated}/-{result.students_deactivated}, "
-            f"lessons +{result.lessons_created}/~{result.lessons_updated}/-{result.lessons_deactivated}",
+        logger.info(
+            "sheet_structure_import_completed",
+            students_created=result.students_created,
+            students_updated=result.students_updated,
+            students_deactivated=result.students_deactivated,
+            lessons_created=result.lessons_created,
+            lessons_updated=result.lessons_updated,
+            lessons_deactivated=result.lessons_deactivated,
         )
     finally:
         await engine.dispose()
 
 
 if __name__ == "__main__":
+    runtime_settings = Settings()  # type: ignore[call-arg]
+    configure_logging(service="import", level=runtime_settings.log_level)
     asyncio.run(run())

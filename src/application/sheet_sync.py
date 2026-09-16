@@ -2,11 +2,14 @@ import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from observability import get_logger
 from port.clock import Clock
 from port.google_sheets import GoogleSheetsGateway
 from port.repositories.sheet_sync_data import SheetSyncDataRepository
 from port.repositories.sheet_sync_queue import SheetSyncQueueRepository, SheetSyncTask
 from port.unit_of_work import UnitOfWork
+
+logger = get_logger(__name__)
 
 
 class SheetSyncConfigurationError(RuntimeError):
@@ -64,6 +67,12 @@ class SheetSyncTaskHandler:
                 processed_version=task.desired_version,
             )
             await self._uow.commit()
+            logger.info(
+                "sheet_sync_task_completed",
+                attendance_id=str(task.attendance_id),
+                version=task.desired_version,
+                queue_item_removed=completed,
+            )
             return completed
         except Exception as error:
             await self._uow.rollback()
@@ -77,4 +86,12 @@ class SheetSyncTaskHandler:
                 max_attempts=self._max_attempts,
             )
             await self._uow.commit()
+            logger.warning(
+                "sheet_sync_task_failed",
+                attendance_id=str(task.attendance_id),
+                version=task.desired_version,
+                attempts=task.attempts,
+                error_type=type(error).__name__,
+                error=str(error),
+            )
             return False

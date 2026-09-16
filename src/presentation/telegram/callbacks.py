@@ -1,0 +1,61 @@
+from aiogram.filters.callback_data import CallbackData
+
+
+class SelectStudentCallback(CallbackData, prefix="student"):
+    student_id: str
+
+
+class ConfirmRegistrationCallback(CallbackData, prefix="register"):
+    student_id: str
+
+
+class CancelRegistrationCallback(CallbackData, prefix="register_cancel"):
+    pass
+
+
+class AttendanceDateCallback(CallbackData, prefix="attendance_date"):
+    value: str
+
+
+class AttendanceLessonCallback(CallbackData, prefix="attendance_lesson"):
+    lesson_id: str
+
+
+class AttendanceStatusCallback(CallbackData, prefix="attendance_status"):
+    lesson_id: str
+    status: str
+
+
+class ConfirmAttendanceCallback(CallbackData, prefix="attendance_confirm"):
+    lesson_id: str
+    status: str
+
+
+class AttendanceNavigationCallback(CallbackData, prefix="attendance_nav"):
+    action: str
+
+
+class ManageAttendanceCallback(CallbackData, prefix="manage_mark"):
+    attendance_id: str
+
+
+class EditAttendanceCallback(CallbackData, prefix="edit_mark"):
+    attendance_id: str
+    status: str
+
+
+class DeleteAttendanceCallback(CallbackData, prefix="delete_mark"):
+    attendance_id: str
+
+
+class ConfirmDeleteAttendanceCallback(CallbackData, prefix="confirm_delete"):
+    attendance_id: str
+
+
+class BonusDecisionCallback(CallbackData, prefix="bonus_decide"):
+    request_id: str
+    approve: int
+
+
+class UnlinkAccountCallback(CallbackData, prefix="unlink_account"):
+    registration_id: str

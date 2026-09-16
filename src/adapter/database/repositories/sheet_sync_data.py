@@ -53,7 +53,7 @@ class SQLAlchemySheetSyncDataRepository:
         return AttendanceSheetData(
             attendance_id=attendance.id,
             version=attendance.version,
-            value=AttendanceStatus(attendance.status).sheet_symbol,
+            value="" if attendance.is_deleted else AttendanceStatus(attendance.status).sheet_symbol,
             target=SheetCellTarget(
                 sheet_name=student.sheet_name,
                 row=lesson.sheet_row,

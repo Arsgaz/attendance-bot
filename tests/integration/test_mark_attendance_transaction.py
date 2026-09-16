@@ -1,6 +1,7 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import func, select
@@ -116,12 +117,23 @@ async def test_attendance_can_be_marked_without_time_restrictions_and_is_committ
 ) -> None:
     engine = create_engine(f"sqlite+aiosqlite:///{tmp_path / 'success.sqlite3'}")
     session_factory = create_session_factory(engine)
-    now = datetime(2026, 9, 16, 12, tzinfo=UTC)
+    now = datetime(2026, 9, 14, 21, tzinfo=UTC)
+    local_date = date(2026, 9, 15)
     try:
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
         async with session_factory() as session:
             student_id, lesson_id = await seed_student_and_lesson(session, now=now)
+            lessons = SQLAlchemyLessonRepository(session, ZoneInfo("Europe/Moscow"))
+            assert await lessons.list_dates(student_id=student_id, subgroup="1") == [local_date]
+            assert [
+                item.id
+                for item in await lessons.list_for_date(
+                    student_id=student_id,
+                    subgroup="1",
+                    lesson_date=local_date,
+                )
+            ] == [lesson_id]
             handler = make_handler(
                 session,
                 now=now,
@@ -134,6 +146,27 @@ async def test_attendance_can_be_marked_without_time_restrictions_and_is_committ
             assert await session.scalar(select(func.count()).select_from(AttendanceModel)) == 1
             assert await session.scalar(select(func.count()).select_from(AttendanceHistoryModel)) == 1
             assert await session.scalar(select(func.count()).select_from(SheetSyncQueueModel)) == 1
+            lessons = SQLAlchemyLessonRepository(session, ZoneInfo("Europe/Moscow"))
+            assert await lessons.list_dates(student_id=student_id, subgroup="1") == [local_date]
+            choices = await lessons.list_for_date(
+                student_id=student_id,
+                subgroup="1",
+                lesson_date=local_date,
+            )
+            assert len(choices) == 1
+            assert choices[0].attendance_id is not None
+            assert choices[0].attendance_status is AttendanceStatus.PRESENT
+            records = await SQLAlchemyAttendanceRepository(
+                session,
+                ZoneInfo("Europe/Moscow"),
+            ).list_for_student(
+                student_id=student_id,
+                limit=30,
+            )
+            assert [(record.subject, record.status) for record in records] == [
+                ("ИИС", AttendanceStatus.PRESENT),
+            ]
+            assert records[0].lesson_date == local_date
     finally:
         await engine.dispose()
 

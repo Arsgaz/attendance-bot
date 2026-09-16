@@ -18,6 +18,75 @@ poetry install
 PYTHONPATH=src poetry run python -m main
 ```
 
+## Запуск через Docker Compose
+
+Docker Compose одновременно запускает миграции, Telegram-бота, worker
+синхронизации Google Sheets и сервис резервного копирования. `.env` и каталог `secrets` подключаются только во
+время запуска и не копируются в image.
+
+Worker сначала доставляет отметки бота в таблицу, затем раз в 60 секунд читает
+явные ручные изменения `✓/+`, `Н`, `Б`, `У` обратно в БД. Очистка ячейки
+удаляет существующую отметку с сохранением аудита.
+
+Если нужно сохранить существующую локальную БД, один раз подготовьте runtime:
+
+```bash
+mkdir -p runtime
+cp attendance.db runtime/attendance.db
+```
+
+Запуск всех компонентов:
+
+```bash
+docker compose up --build -d
+docker compose ps
+docker compose logs -f bot worker
+```
+
+## Резервное копирование
+
+Сервис `backup` раз в сутки создаёт консистентный gzip-снимок SQLite через
+SQLite Backup API в каталоге `backups/`. Перед упаковкой выполняется
+`PRAGMA integrity_check`. По умолчанию сохраняются семь последних снимков и по
+одному снимку за четыре последние ISO-недели.
+
+Создать дополнительный снимок вручную:
+
+```bash
+docker compose run --rm backup python -m backup
+```
+
+Посмотреть архивы:
+
+```bash
+ls -lh backups
+```
+
+Восстановление выполняется только при остановленных процессах, работающих с БД:
+
+```bash
+docker compose stop bot worker backup
+docker compose run --rm backup python -m backup \
+  --restore /backups/attendance-YYYYMMDDTHHMMSSZ.sqlite3.gz --yes
+docker compose up -d bot worker backup
+```
+
+Перед заменой БД команда автоматически создаёт архив `pre-restore-*` с текущим
+состоянием. Восстанавливаемый файл также проходит `integrity_check`.
+
+Остановка без удаления БД:
+
+```bash
+docker compose down
+```
+
+База хранится в `runtime/attendance.db`. Удаление каталога `runtime` удалит
+локальные данные приложения. Для обновления структуры Google Sheets выполните:
+
+```bash
+docker compose run --rm bot python -m import_sheet
+```
+
 До добавления токена можно запускать доменные тесты:
 
 ```bash

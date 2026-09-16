@@ -24,6 +24,15 @@ class SQLAlchemySheetStructureRepository:
         lessons = list((await self._session.scalars(select(LessonModel))).all())
         mappings = list((await self._session.scalars(select(SheetMappingModel))).all())
         mappings_by_entity = {(item.entity_type, item.entity_id): item for item in mappings}
+        lessons_by_id = {item.id: item for item in lessons}
+        lessons_by_sheet_row = {
+            mapping.sheet_row: lessons_by_id[mapping.entity_id]
+            for mapping in mappings
+            if mapping.entity_type == "lesson"
+            and mapping.sheet_name == structure.sheet_name
+            and mapping.sheet_row is not None
+            and mapping.entity_id in lessons_by_id
+        }
 
         students_by_full_name = {item.full_name: item for item in students}
         students_by_short_name = {
@@ -91,7 +100,9 @@ class SQLAlchemySheetStructureRepository:
         lessons_updated = 0
         imported_lesson_ids: set[UUID] = set()
         for imported in structure.lessons:
-            lesson = lessons_by_key.get((imported.lesson_date, imported.sequence_number))
+            lesson = lessons_by_sheet_row.get(imported.sheet_row) or lessons_by_key.get(
+                (imported.lesson_date, imported.sequence_number),
+            )
             starts_at = datetime.combine(imported.lesson_date, time.min, self._timezone).astimezone(UTC)
             ends_at = datetime.combine(imported.lesson_date, time.max, self._timezone).astimezone(UTC)
             if lesson is None:
@@ -104,7 +115,7 @@ class SQLAlchemySheetStructureRepository:
                     subject=imported.subject,
                     subgroup=imported.subgroup,
                     source="sheet",
-                    is_active=True,
+                    is_active=imported.is_active,
                     created_at=now,
                     updated_at=now,
                 )
@@ -116,7 +127,7 @@ class SQLAlchemySheetStructureRepository:
                 lesson.subject = imported.subject
                 lesson.subgroup = imported.subgroup
                 lesson.source = "sheet"
-                lesson.is_active = True
+                lesson.is_active = imported.is_active
                 lesson.updated_at = now
                 lessons_updated += 1
             self._upsert_mapping(

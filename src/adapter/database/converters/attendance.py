@@ -9,6 +9,7 @@ def attendance_to_domain(model: AttendanceModel) -> Attendance:
         student_id=model.student_id,
         lesson_id=model.lesson_id,
         status=AttendanceStatus(model.status),
+        is_deleted=model.is_deleted,
         version=model.version,
         created_by_provider=model.created_by_provider,
         created_by_external_user_id=model.created_by_external_user_id,

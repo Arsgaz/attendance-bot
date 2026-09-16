@@ -3,9 +3,12 @@ from application.exceptions.registration import (
     RegistrationAdminActionForbiddenError,
     RegistrationNotFoundError,
 )
+from observability import get_logger
 from port.clock import Clock
 from port.repositories.registration import RegistrationRepository
 from port.unit_of_work import UnitOfWork
+
+logger = get_logger(__name__)
 
 
 class UnlinkRegistrationHandler:
@@ -36,3 +39,9 @@ class UnlinkRegistrationHandler:
         except Exception:
             await self._uow.rollback()
             raise
+        logger.warning(
+            "registration_unlinked",
+            registration_id=str(registration.id),
+            student_id=str(registration.student_id),
+            admin_provider=command.admin_provider.value,
+        )

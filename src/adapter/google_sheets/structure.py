@@ -42,8 +42,11 @@ class GoogleSheetsStructureSource:
                 f"{self._layout.service_date_column}{last_row}",
             ],
         )
+        subject_backgrounds = await self._client.get_background_colors(
+            cell_range=f"{journal}!D{first_row}:D{last_row}",
+        )
         students = self._read_students(headers, settings_rows)
-        lessons = self._read_lessons(lesson_rows, date_rows)
+        lessons = self._read_lessons(lesson_rows, date_rows, subject_backgrounds)
         return SheetStructure(
             sheet_name=self._sheet_name,
             students=tuple(students),
@@ -94,6 +97,7 @@ class GoogleSheetsStructureSource:
         self,
         lesson_rows: list[list[object]],
         date_rows: list[list[object]],
+        subject_backgrounds: list[tuple[float, float, float] | None],
     ) -> list[SheetLesson]:
         lessons: list[SheetLesson] = []
         sequence_by_date: defaultdict[date, int] = defaultdict(int)
@@ -101,6 +105,9 @@ class GoogleSheetsStructureSource:
         for offset in range(row_count):
             row = lesson_rows[offset] if offset < len(lesson_rows) else []
             subject = _text_at(row, 0)
+            background = (
+                subject_backgrounds[offset] if offset < len(subject_backgrounds) else None
+            )
             if not subject:
                 continue
             subgroup = _subgroup(_value_at(row, 1))
@@ -125,6 +132,7 @@ class GoogleSheetsStructureSource:
                         subgroup=subgroup,
                         sequence_number=sequence_number,
                     ),
+                    is_active=not _is_gray(background),
                 ),
             )
         return lessons
@@ -157,3 +165,12 @@ def _value_at(row: list[object], index: int) -> object | None:
 
 def _text(value: object | None) -> str:
     return " ".join(str(value or "").strip().split())
+
+
+def _is_gray(color: tuple[float, float, float] | None) -> bool:
+    if color is None:
+        return False
+    darkest = min(color)
+    lightest = max(color)
+    brightness = sum(color) / 3
+    return lightest - darkest <= 0.03 and 0.4 <= brightness <= 0.9

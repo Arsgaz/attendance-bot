@@ -18,14 +18,18 @@ class RegistrationView:
     id: UUID
     student_id: UUID
     student_full_name: str
+    student_subgroup: str
     provider: IdentityProvider
     external_user_id: str
     username: str | None
     status: RegistrationStatus
+    is_starosta: bool
 
 
 class RegistrationRepository(Protocol):
     async def list_available_students(self) -> list[StudentChoice]: ...
+
+    async def list_active(self) -> list[RegistrationView]: ...
 
     async def get_active_by_external_id(
         self,

@@ -24,6 +24,7 @@
 /logs/
 /backups/
 /dumps/
+/runtime/
 
 # Python and tooling
 .venv/

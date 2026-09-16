@@ -26,3 +26,9 @@ class Settings(BaseSettings):
     sync_queue_lock_timeout_seconds: int = 300
     sync_queue_retry_base_seconds: int = 5
     sync_queue_retry_max_seconds: int = 900
+    sheet_reconciliation_interval_seconds: int = 60
+    backup_dir: str = "./backups"
+    backup_interval_seconds: int = 86400
+    backup_daily_retention: int = 7
+    backup_weekly_retention: int = 4
+    log_level: str = "INFO"

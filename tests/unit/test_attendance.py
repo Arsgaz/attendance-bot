@@ -72,3 +72,38 @@ def test_change_status_increments_version_and_records_event() -> None:
     assert event.old_status is AttendanceStatus.PRESENT
     assert event.new_status is AttendanceStatus.EXCUSED
     assert event.reason == "Подтверждающий документ"
+
+
+def test_deleted_attendance_can_be_restored_with_new_status() -> None:
+    now = datetime(2026, 9, 16, 12, tzinfo=UTC)
+    student_id = uuid4()
+    actor = Actor(
+        provider=IdentityProvider.TELEGRAM,
+        external_user_id="42",
+        role=ActorRole.STUDENT,
+        student_id=student_id,
+    )
+    attendance = Attendance.create(
+        attendance_id=uuid4(),
+        student_id=student_id,
+        lesson_id=uuid4(),
+        status=AttendanceStatus.PRESENT,
+        actor=actor,
+        now=now,
+    )
+    attendance.pull_events()
+
+    attendance.delete(actor=actor, now=now)
+    assert attendance.is_deleted
+    assert attendance.version == 2
+    assert attendance.pull_events()[0].reason == "Отметка удалена"
+
+    attendance.change_status(
+        status=AttendanceStatus.EXCUSED,
+        actor=actor,
+        now=now,
+        reason="Повторная отметка",
+    )
+    assert not attendance.is_deleted
+    assert attendance.status is AttendanceStatus.EXCUSED
+    assert attendance.version == 3
