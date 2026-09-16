@@ -120,10 +120,22 @@ async def run(*, once: bool) -> None:
     while True:
         now = time.monotonic()
         should_reconcile = once or now >= next_reconciliation_at
-        claimed, completed, reconciliation = await run_once(
-            settings,
-            reconcile=should_reconcile,
-        )
+        try:
+            claimed, completed, reconciliation = await run_once(
+                settings,
+                reconcile=should_reconcile,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                "worker_iteration_failed",
+                retry_in_seconds=settings.sync_queue_poll_interval_seconds,
+            )
+            if once:
+                raise
+            await asyncio.sleep(settings.sync_queue_poll_interval_seconds)
+            continue
         logger.info("sync_batch_completed", claimed=claimed, completed=completed)
         if reconciliation is not None:
             logger.info(
