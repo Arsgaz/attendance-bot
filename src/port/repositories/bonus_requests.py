@@ -3,6 +3,8 @@ from datetime import date, datetime
 from typing import Protocol
 from uuid import UUID
 
+from domain.vo.attendance_status import AttendanceStatus
+
 
 @dataclass(frozen=True, slots=True)
 class BonusRequestView:
@@ -12,6 +14,8 @@ class BonusRequestView:
     lesson_id: UUID
     lesson_date: date
     subject: str
+    requested_status: AttendanceStatus
+    reason: str | None
     status: str
 
 
@@ -22,6 +26,8 @@ class BonusRequestRepository(Protocol):
         request_id: UUID,
         student_id: UUID,
         lesson_id: UUID,
+        requested_status: AttendanceStatus,
+        reason: str | None,
         now: datetime,
     ) -> BonusRequestView: ...
 

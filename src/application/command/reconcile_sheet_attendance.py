@@ -1,5 +1,8 @@
+"""Reconcile local attendance with the authoritative Google Sheet."""
+
 from dataclasses import dataclass
 
+from application.base_interactor import Interactor
 from domain.attendance.entity import Attendance
 from domain.vo.actor import Actor, ActorRole, IdentityProvider
 from domain.vo.attendance_status import AttendanceStatus
@@ -19,7 +22,7 @@ class SheetReconciliationResult:
     skipped_pending: int
 
 
-class ReconcileSheetAttendanceHandler:
+class ReconcileSheetAttendanceHandler(Interactor[None, SheetReconciliationResult]):
     def __init__(
         self,
         *,
@@ -41,7 +44,8 @@ class ReconcileSheetAttendanceHandler:
         self._ids = ids
         self._sheet_name = sheet_name
 
-    async def __call__(self) -> SheetReconciliationResult:
+    async def __call__(self, data: None) -> SheetReconciliationResult:
+        del data
         values = await self._sheets.read_attendance(sheet_name=self._sheet_name)
         cells = await self._mappings.list_cells(sheet_name=self._sheet_name)
         created = 0

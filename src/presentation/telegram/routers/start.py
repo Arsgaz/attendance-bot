@@ -11,7 +11,12 @@ from application.exceptions.registration import (
     ActiveRegistrationExistsError,
     StudentNotAvailableError,
 )
-from application.query import GetMyRegistrationHandler, ListAvailableStudentsHandler
+from application.query import (
+    GetMyRegistrationHandler,
+    GetMyRegistrationQuery,
+    ListAvailableStudentsHandler,
+    ListAvailableStudentsQuery,
+)
 from domain.vo.actor import IdentityProvider
 from port.repositories.registration import StudentChoice
 from presentation.telegram.callbacks import (
@@ -36,14 +41,18 @@ async def start(
 ) -> None:
     if message.from_user is None:
         return
-    registration = await get_registration(IdentityProvider.TELEGRAM, str(message.from_user.id))
+    registration = await get_registration(GetMyRegistrationQuery(
+        provider=IdentityProvider.TELEGRAM,
+        external_user_id=str(message.from_user.id),
+    ))
     if registration is not None:
         await message.answer(
-            f"Вы зарегистрированы как {registration.student_full_name}.",
+            f"Вы зарегистрированы как {registration.student_full_name}",
             reply_markup=main_menu_keyboard(is_starosta=registration.is_starosta),
         )
         return
-    await _show_available_students(message, list_students)
+    students = await list_students(ListAvailableStudentsQuery())
+    await _show_available_students(message, students)
 
 
 @router.callback_query(SelectStudentCallback.filter())
@@ -55,10 +64,11 @@ async def select_student(
     if not isinstance(callback.message, Message):
         await callback.answer()
         return
-    student = await _find_available_student(callback_data.student_id, list_students)
+    students = await list_students(ListAvailableStudentsQuery())
+    student = _find_available_student(callback_data.student_id, students)
     if student is None:
-        await callback.answer("Эта запись уже занята. Обновляю список.", show_alert=True)
-        await _show_available_students(callback.message, list_students, edit=True)
+        await callback.answer("Эта запись уже занята, обновляю список", show_alert=True)
+        await _show_available_students(callback.message, students, edit=True)
         return
     await callback.message.edit_text(
         f"Подтвердите регистрацию:\n\n{student.full_name}\nПодгруппа: {student.subgroup}",
@@ -80,7 +90,7 @@ async def confirm_registration(
     try:
         student_id = UUID(callback_data.student_id)
     except ValueError:
-        await callback.answer("Кнопка устарела. Запустите /start заново.", show_alert=True)
+        await callback.answer("Кнопка устарела, запустите /start заново", show_alert=True)
         return
     try:
         await register_student(
@@ -92,18 +102,18 @@ async def confirm_registration(
             ),
         )
     except ActiveRegistrationExistsError:
-        await callback.answer("Ваш аккаунт уже зарегистрирован.", show_alert=True)
+        await callback.answer("Ваш аккаунт уже зарегистрирован", show_alert=True)
         return
     except StudentNotAvailableError:
-        await callback.answer("Эта запись уже занята. Выберите другую.", show_alert=True)
+        await callback.answer("Эта запись уже занята, выберите другую", show_alert=True)
         return
-    await callback.message.edit_text("Регистрация завершена.")
-    registration = await get_registration(
-        IdentityProvider.TELEGRAM,
-        str(callback.from_user.id),
-    )
+    await callback.message.edit_text("Регистрация завершена")
+    registration = await get_registration(GetMyRegistrationQuery(
+        provider=IdentityProvider.TELEGRAM,
+        external_user_id=str(callback.from_user.id),
+    ))
     await callback.message.answer(
-        "Теперь можно отмечать посещаемость.",
+        "Теперь можно отмечать посещаемость",
         reply_markup=main_menu_keyboard(
             is_starosta=registration.is_starosta if registration is not None else False,
         ),
@@ -117,18 +127,18 @@ async def cancel_registration(
     list_students: FromDishka[ListAvailableStudentsHandler],
 ) -> None:
     if isinstance(callback.message, Message):
-        await _show_available_students(callback.message, list_students, edit=True)
+        students = await list_students(ListAvailableStudentsQuery())
+        await _show_available_students(callback.message, students, edit=True)
     await callback.answer()
 
 
 async def _show_available_students(
     message: Message,
-    handler: ListAvailableStudentsHandler,
+    students: list[StudentChoice],
     *,
     edit: bool = False,
 ) -> None:
-    students = await handler()
-    text = "Выберите себя из списка:" if students else "Свободных записей студентов сейчас нет."
+    text = "Выберите себя из списка:" if students else "Свободных записей студентов сейчас нет"
     markup = students_keyboard(students) if students else None
     if edit:
         await message.edit_text(text, reply_markup=markup)
@@ -136,12 +146,12 @@ async def _show_available_students(
         await message.answer(text, reply_markup=markup)
 
 
-async def _find_available_student(
+def _find_available_student(
     student_id: str,
-    handler: ListAvailableStudentsHandler,
+    students: list[StudentChoice],
 ) -> StudentChoice | None:
     try:
         parsed_id = UUID(student_id)
     except ValueError:
         return None
-    return next((student for student in await handler() if student.id == parsed_id), None)
+    return next((student for student in students if student.id == parsed_id), None)

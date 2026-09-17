@@ -20,6 +20,7 @@ class BonusRequestModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     student_id: Mapped[UUID] = mapped_column(ForeignKey("students.id", ondelete="RESTRICT"))
     lesson_id: Mapped[UUID] = mapped_column(ForeignKey("lessons.id", ondelete="RESTRICT"))
+    requested_status: Mapped[str] = mapped_column(String(16), nullable=False, default="bonus")
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     decided_by_provider: Mapped[str | None] = mapped_column(String(16))
     decided_by_external_user_id: Mapped[str | None] = mapped_column(String(128))

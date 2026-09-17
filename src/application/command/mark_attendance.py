@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from application.base_interactor import Interactor
 from application.dto.attendance import MarkAttendanceCommand, MarkAttendanceResult
 from domain.attendance.entity import Attendance
 from domain.attendance.policies import BonusEligibilityPolicy
@@ -20,7 +21,7 @@ from port.unit_of_work import UnitOfWork
 logger = get_logger(__name__)
 
 
-class MarkAttendanceHandler:
+class MarkAttendanceHandler(Interactor[MarkAttendanceCommand, MarkAttendanceResult]):
     def __init__(
         self,
         *,
@@ -45,8 +46,6 @@ class MarkAttendanceHandler:
     async def __call__(
         self,
         command: MarkAttendanceCommand,
-        *,
-        bonus_approved: bool = False,
     ) -> MarkAttendanceResult:
         if command.actor.student_id is None:
             raise PermissionError("Actor is not linked to a student")
@@ -75,7 +74,7 @@ class MarkAttendanceHandler:
                 week_start=week_start,
                 week_end=week_start + timedelta(days=7),
             )
-            self._bonus_policy.ensure_eligible(approved=bonus_approved, used_count=used_count)
+            self._bonus_policy.ensure_eligible(approved=False, used_count=used_count)
 
         if existing is None:
             attendance_id = self._ids.new()

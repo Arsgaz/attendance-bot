@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from adapter.database.models import BonusRequestModel, BonusRequestStatus, LessonModel, StudentModel
+from domain.vo.attendance_status import AttendanceStatus
 from port.repositories.bonus_requests import BonusRequestView
 
 
@@ -20,6 +21,8 @@ class SQLAlchemyBonusRequestRepository:
         request_id: UUID,
         student_id: UUID,
         lesson_id: UUID,
+        requested_status: AttendanceStatus,
+        reason: str | None,
         now: datetime,
     ) -> BonusRequestView:
         statement = select(BonusRequestModel).where(
@@ -32,7 +35,9 @@ class SQLAlchemyBonusRequestRepository:
                 id=request_id,
                 student_id=student_id,
                 lesson_id=lesson_id,
+                requested_status=requested_status.value,
                 status=BonusRequestStatus.PENDING.value,
+                comment=reason,
                 created_at=now,
                 updated_at=now,
             )
@@ -44,6 +49,8 @@ class SQLAlchemyBonusRequestRepository:
             model.decided_at = None
             model.comment = None
             model.updated_at = now
+        model.requested_status = requested_status.value
+        model.comment = reason
         await self._session.flush()
         view = await self.get(model.id)
         if view is None:
@@ -109,6 +116,8 @@ def _to_view(
         lesson_id=model.lesson_id,
         lesson_date=_local_date(lesson.lesson_date, timezone),
         subject=lesson.subject,
+        requested_status=AttendanceStatus(model.requested_status),
+        reason=model.comment,
         status=model.status,
     )
 

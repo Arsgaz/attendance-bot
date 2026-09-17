@@ -43,6 +43,7 @@ class Attendance(Entity[UUID]):
         status: AttendanceStatus,
         actor: Actor,
         now: datetime,
+        reason: str | None = None,
     ) -> "Attendance":
         attendance = cls(
             id=attendance_id,
@@ -55,7 +56,7 @@ class Attendance(Entity[UUID]):
             created_by_external_user_id=actor.external_user_id,
             updated_by_provider=actor.provider.value,
             updated_by_external_user_id=actor.external_user_id,
-            comment=None,
+            comment=reason,
             created_at=now,
             updated_at=now,
         )
@@ -66,6 +67,7 @@ class Attendance(Entity[UUID]):
                 new_status=status,
                 actor=actor,
                 occurred_at=now,
+                reason=reason,
             ),
         )
         return attendance

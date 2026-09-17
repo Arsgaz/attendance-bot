@@ -47,10 +47,10 @@ async def handle_telegram_error(event: ErrorEvent) -> bool:
     )
     message = update.message
     if message is not None:
-        await message.answer("Произошла внутренняя ошибка. Попробуйте ещё раз позднее.")
+        await message.answer("Произошла внутренняя ошибка, попробуйте ещё раз позднее")
     elif update.callback_query is not None:
         await update.callback_query.answer(
-            "Произошла внутренняя ошибка. Попробуйте ещё раз позднее.",
+            "Произошла внутренняя ошибка, попробуйте ещё раз позднее",
             show_alert=True,
         )
     return True

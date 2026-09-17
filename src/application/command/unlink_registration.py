@@ -1,3 +1,4 @@
+from application.base_interactor import Interactor
 from application.dto.registration import UnlinkRegistrationCommand
 from application.exceptions.registration import (
     RegistrationAdminActionForbiddenError,
@@ -11,7 +12,7 @@ from port.unit_of_work import UnitOfWork
 logger = get_logger(__name__)
 
 
-class UnlinkRegistrationHandler:
+class UnlinkRegistrationHandler(Interactor[UnlinkRegistrationCommand, None]):
     def __init__(
         self,
         *,

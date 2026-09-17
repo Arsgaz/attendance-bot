@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from uuid import UUID
 
+from application.base_interactor import Interactor
 from domain.common.exceptions import AttendanceNotFoundError
 from domain.vo.actor import Actor
 from domain.vo.attendance_status import AttendanceStatus
@@ -20,7 +21,7 @@ class UpdateOwnAttendanceCommand:
     status: AttendanceStatus | None
 
 
-class UpdateOwnAttendanceHandler:
+class UpdateOwnAttendanceHandler(Interactor[UpdateOwnAttendanceCommand, None]):
     def __init__(
         self,
         *,

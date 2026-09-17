@@ -2,7 +2,10 @@ from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
-from application.query.list_attendance_options import ListAttendanceDatesHandler
+from application.query.list_attendance_options import (
+    ListAttendanceDatesHandler,
+    ListAttendanceDatesQuery,
+)
 
 
 class FakeClock:
@@ -28,7 +31,7 @@ async def test_attendance_dates_open_current_week_and_navigate_by_week() -> None
         ZoneInfo("Europe/Moscow"),
     )
 
-    current = await handler.by_week(student_id=uuid4(), subgroup="2")
+    current = await handler(ListAttendanceDatesQuery(student_id=uuid4(), subgroup="2"))
 
     assert current is not None
     assert current.week_start == date(2026, 9, 14)
@@ -37,11 +40,11 @@ async def test_attendance_dates_open_current_week_and_navigate_by_week() -> None
     assert current.older_week_start is None
     assert current.newer_week_start == date(2026, 9, 21)
 
-    next_week = await handler.by_week(
+    next_week = await handler(ListAttendanceDatesQuery(
         student_id=uuid4(),
         subgroup="2",
         week_start=date(2026, 9, 21),
-    )
+    ))
 
     assert next_week is not None
     assert next_week.dates == (date(2026, 9, 22),)

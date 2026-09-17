@@ -52,6 +52,22 @@ class SQLAlchemyRegistrationRepository:
             )
         return result
 
+    async def list_starosta_external_ids(self, provider: IdentityProvider) -> list[str]:
+        statement = (
+            select(ExternalAccountModel.external_user_id)
+            .join(StudentRoleModel, StudentRoleModel.student_id == ExternalAccountModel.student_id)
+            .where(
+                ExternalAccountModel.provider == provider.value,
+                ExternalAccountModel.status == ACTIVE_STATUS,
+                StudentRoleModel.role == "starosta",
+                StudentRoleModel.revoked_at.is_(None),
+            )
+        )
+        result = set(await self._session.scalars(statement))
+        if provider is IdentityProvider.TELEGRAM:
+            result.update(str(value) for value in self._admin_telegram_ids)
+        return sorted(result)
+
     async def get_active_by_external_id(
         self,
         provider: IdentityProvider,

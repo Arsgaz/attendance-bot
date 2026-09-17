@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import timedelta
 
-from application.sheet_sync import SheetSyncTaskHandler
+from application.command.sync_sheet_task import SheetSyncTaskHandler
 from port.clock import Clock
 from port.repositories.sheet_sync_queue import SheetSyncQueueRepository
 from port.unit_of_work import UnitOfWork

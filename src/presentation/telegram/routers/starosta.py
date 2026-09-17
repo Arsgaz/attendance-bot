@@ -4,10 +4,22 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, Message
 from dishka.integrations.aiogram import FromDishka
 
-from application.bonus_requests import DecideBonusRequestHandler, ListPendingBonusRequestsHandler
+from application.command.decide_attendance_request import (
+    DecideAttendanceRequestCommand,
+    DecideAttendanceRequestHandler,
+)
 from application.command.unlink_registration import UnlinkRegistrationHandler
 from application.dto.registration import UnlinkRegistrationCommand
-from application.query import GetMyRegistrationHandler, ListActiveRegistrationsHandler
+from application.query import (
+    GetMyRegistrationHandler,
+    GetMyRegistrationQuery,
+    ListActiveRegistrationsHandler,
+    ListActiveRegistrationsQuery,
+)
+from application.query.list_pending_attendance_requests import (
+    ListPendingAttendanceRequestsHandler,
+    ListPendingAttendanceRequestsQuery,
+)
 from domain.common.exceptions import DomainError
 from domain.vo.actor import Actor, ActorRole, IdentityProvider
 from presentation.telegram.callbacks import BonusDecisionCallback, UnlinkAccountCallback
@@ -27,12 +39,14 @@ async def starosta_menu(
     message: Message,
     get_registration: FromDishka[GetMyRegistrationHandler],
 ) -> None:
-    registration = await _starosta_registration(
-        message.from_user.id if message.from_user else None,
-        get_registration,
-    )
-    if registration is None:
-        await message.answer("Недостаточно прав.")
+    registration = None
+    if message.from_user is not None:
+        registration = await get_registration(GetMyRegistrationQuery(
+            provider=IdentityProvider.TELEGRAM,
+            external_user_id=str(message.from_user.id),
+        ))
+    if registration is None or not registration.is_starosta:
+        await message.answer("Недостаточно прав")
         return
     await message.answer("Меню старосты:", reply_markup=starosta_menu_keyboard())
 
@@ -40,27 +54,27 @@ async def starosta_menu(
 @router.callback_query(F.data == "admin:bonus")
 async def pending_bonus_requests(
     callback: CallbackQuery,
-    list_requests: FromDishka[ListPendingBonusRequestsHandler],
+    list_requests: FromDishka[ListPendingAttendanceRequestsHandler],
 ) -> None:
     if not isinstance(callback.message, Message):
         await callback.answer()
         return
     try:
-        requests = await list_requests(
+        requests = await list_requests(ListPendingAttendanceRequestsQuery(
             provider=IdentityProvider.TELEGRAM,
             external_user_id=str(callback.from_user.id),
-        )
+        ))
     except PermissionError:
-        await callback.answer("Недостаточно прав.", show_alert=True)
+        await callback.answer("Недостаточно прав", show_alert=True)
         return
     if not requests:
         await callback.message.edit_text(
-            "Ожидающих заявок Б нет.",
+            "Ожидающих заявок Б и У нет",
             reply_markup=starosta_navigation_keyboard(),
         )
     else:
         await callback.message.edit_text(
-            "Заявки Б:",
+            "Заявки Б и У:",
             reply_markup=bonus_requests_keyboard(requests),
         )
     await callback.answer()
@@ -70,11 +84,12 @@ async def pending_bonus_requests(
 async def decide_bonus_request(
     callback: CallbackQuery,
     callback_data: BonusDecisionCallback,
-    decide: FromDishka[DecideBonusRequestHandler],
+    decide: FromDishka[DecideAttendanceRequestHandler],
+    list_requests: FromDishka[ListPendingAttendanceRequestsHandler],
 ) -> None:
     try:
         request_id = UUID(callback_data.request_id)
-        await decide(
+        await decide(DecideAttendanceRequestCommand(
             request_id=request_id,
             approved=bool(callback_data.approve),
             actor=Actor(
@@ -82,15 +97,26 @@ async def decide_bonus_request(
                 external_user_id=str(callback.from_user.id),
                 role=ActorRole.STAROSTA,
             ),
-        )
+        ))
     except (ValueError, PermissionError, DomainError):
-        await callback.answer("Заявка недоступна.", show_alert=True)
+        await callback.answer("Заявка недоступна", show_alert=True)
         return
     if isinstance(callback.message, Message):
-        await callback.message.edit_text(
-            "Заявка одобрена." if callback_data.approve else "Заявка отклонена.",
-            reply_markup=starosta_navigation_keyboard(),
-        )
+        remaining = await list_requests(ListPendingAttendanceRequestsQuery(
+            provider=IdentityProvider.TELEGRAM,
+            external_user_id=str(callback.from_user.id),
+        ))
+        result = "Заявка одобрена" if callback_data.approve else "Заявка отклонена"
+        if remaining:
+            await callback.message.edit_text(
+                f"{result}\n\nОставшиеся заявки:",
+                reply_markup=bonus_requests_keyboard(remaining),
+            )
+        else:
+            await callback.message.edit_text(
+                f"{result}\n\nОжидающих заявок нет",
+                reply_markup=starosta_navigation_keyboard(),
+            )
     await callback.answer()
 
 
@@ -103,12 +129,12 @@ async def active_registrations(
         await callback.answer()
         return
     try:
-        registrations = await list_registrations(
+        registrations = await list_registrations(ListActiveRegistrationsQuery(
             provider=IdentityProvider.TELEGRAM,
             external_user_id=str(callback.from_user.id),
-        )
+        ))
     except PermissionError:
-        await callback.answer("Недостаточно прав.", show_alert=True)
+        await callback.answer("Недостаточно прав", show_alert=True)
         return
     registrations = [
         item
@@ -120,7 +146,7 @@ async def active_registrations(
     ]
     if not registrations:
         await callback.message.edit_text(
-            "Других активных привязок нет.",
+            "Других активных привязок нет",
             reply_markup=starosta_navigation_keyboard(),
         )
     else:
@@ -146,11 +172,11 @@ async def unlink_account(
             ),
         )
     except (ValueError, PermissionError):
-        await callback.answer("Привязка недоступна.", show_alert=True)
+        await callback.answer("Привязка недоступна", show_alert=True)
         return
     if isinstance(callback.message, Message):
         await callback.message.edit_text(
-            "Пользователь отвязан.",
+            "Пользователь отвязан",
             reply_markup=starosta_navigation_keyboard(),
         )
     await callback.answer()
@@ -164,9 +190,12 @@ async def navigate_starosta(
     if not isinstance(callback.message, Message):
         await callback.answer()
         return
-    registration = await _starosta_registration(callback.from_user.id, get_registration)
-    if registration is None:
-        await callback.answer("Недостаточно прав.", show_alert=True)
+    registration = await get_registration(GetMyRegistrationQuery(
+        provider=IdentityProvider.TELEGRAM,
+        external_user_id=str(callback.from_user.id),
+    ))
+    if registration is None or not registration.is_starosta:
+        await callback.answer("Недостаточно прав", show_alert=True)
         return
     if callback.data == "admin:back":
         await callback.message.edit_text(
@@ -174,21 +203,12 @@ async def navigate_starosta(
             reply_markup=starosta_menu_keyboard(),
         )
     else:
-        await callback.message.edit_text("Меню старосты закрыто.")
+        await callback.message.edit_text("Меню старосты закрыто")
         await callback.message.answer(
             "Главное меню:",
             reply_markup=main_menu_keyboard(is_starosta=True),
         )
     await callback.answer()
-
-
-async def _starosta_registration(external_user_id: int | None, handler: GetMyRegistrationHandler):
-    if external_user_id is None:
-        return None
-    registration = await handler(IdentityProvider.TELEGRAM, str(external_user_id))
-    return registration if registration is not None and registration.is_starosta else None
-
-
 @router.callback_query(F.data == "noop")
 async def noop(callback: CallbackQuery) -> None:
     await callback.answer()

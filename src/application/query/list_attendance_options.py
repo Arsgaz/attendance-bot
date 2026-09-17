@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from application.base_interactor import Interactor
 from port.clock import Clock
 from port.repositories.lessons import LessonChoice, LessonRepository
 
@@ -16,23 +17,26 @@ class AttendanceDatesWeekPage:
     older_week_start: date | None
 
 
-class ListAttendanceDatesHandler:
+@dataclass(frozen=True, slots=True)
+class ListAttendanceDatesQuery:
+    student_id: UUID
+    subgroup: str
+    week_start: date | None = None
+
+
+class ListAttendanceDatesHandler(
+    Interactor[ListAttendanceDatesQuery, AttendanceDatesWeekPage | None],
+):
     def __init__(self, lessons: LessonRepository, clock: Clock, timezone: ZoneInfo) -> None:
         self._lessons = lessons
         self._clock = clock
         self._timezone = timezone
 
-    async def __call__(self, *, student_id: UUID, subgroup: str) -> list[date]:
-        return await self._lessons.list_dates(student_id=student_id, subgroup=subgroup)
-
-    async def by_week(
-        self,
-        *,
-        student_id: UUID,
-        subgroup: str,
-        week_start: date | None = None,
-    ) -> AttendanceDatesWeekPage | None:
-        dates = await self(student_id=student_id, subgroup=subgroup)
+    async def __call__(self, query: ListAttendanceDatesQuery) -> AttendanceDatesWeekPage | None:
+        dates = await self._lessons.list_dates(
+            student_id=query.student_id,
+            subgroup=query.subgroup,
+        )
         if not dates:
             return None
         dates_by_week: dict[date, list[date]] = {}
@@ -40,6 +44,7 @@ class ListAttendanceDatesHandler:
             start = value - timedelta(days=value.weekday())
             dates_by_week.setdefault(start, []).append(value)
         weeks = sorted(dates_by_week)
+        week_start = query.week_start
         if week_start not in dates_by_week:
             today = self._clock.now().astimezone(self._timezone).date()
             current = today - timedelta(days=today.weekday())
@@ -54,19 +59,23 @@ class ListAttendanceDatesHandler:
         )
 
 
-class ListLessonsForDateHandler:
+@dataclass(frozen=True, slots=True)
+class ListLessonsForDateQuery:
+    student_id: UUID
+    subgroup: str
+    lesson_date: date
+
+
+class ListLessonsForDateHandler(Interactor[ListLessonsForDateQuery, list[LessonChoice]]):
     def __init__(self, lessons: LessonRepository) -> None:
         self._lessons = lessons
 
     async def __call__(
         self,
-        *,
-        student_id: UUID,
-        subgroup: str,
-        lesson_date: date,
+        query: ListLessonsForDateQuery,
     ) -> list[LessonChoice]:
         return await self._lessons.list_for_date(
-            student_id=student_id,
-            subgroup=subgroup,
-            lesson_date=lesson_date,
+            student_id=query.student_id,
+            subgroup=query.subgroup,
+            lesson_date=query.lesson_date,
         )

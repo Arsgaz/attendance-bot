@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from application.sheet_sync import RetryPolicy, SheetSyncTaskHandler
+from application.command.sync_sheet_task import RetryPolicy, SheetSyncTaskHandler
 from port.google_sheets import SheetCellTarget
 from port.repositories.sheet_sync_data import AttendanceSheetData
 from port.repositories.sheet_sync_queue import SheetSyncTask

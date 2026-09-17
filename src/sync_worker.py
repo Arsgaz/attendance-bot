@@ -22,13 +22,13 @@ from adapter.google_sheets import (
     SafeGoogleSheetsGateway,
 )
 from adapter.id_generator.uuid import UUIDGenerator
-from application.import_sheet_structure import ImportSheetStructureHandler
-from application.sheet_reconciliation import (
+from application.command.import_sheet_structure import ImportSheetStructureHandler
+from application.command.reconcile_sheet_attendance import (
     ReconcileSheetAttendanceHandler,
     SheetReconciliationResult,
 )
-from application.sheet_sync import RetryPolicy, SheetSyncTaskHandler
-from application.sheet_sync_worker import SheetSyncWorker
+from application.command.sync_sheet_task import RetryPolicy, SheetSyncTaskHandler
+from application.service.sheet_sync_worker import SheetSyncWorker
 from config.settings import Settings
 from observability import configure_logging, get_logger
 
@@ -98,7 +98,7 @@ async def run_once(
                     repository=SQLAlchemySheetStructureRepository(session, timezone=timezone),
                     uow=uow,
                     clock=clock,
-                )()
+                )(None)
                 reconciliation = await ReconcileSheetAttendanceHandler(
                     mappings=SQLAlchemySheetReconciliationRepository(session),
                     attendance=SQLAlchemyAttendanceRepository(session),
@@ -108,7 +108,7 @@ async def run_once(
                     clock=clock,
                     ids=UUIDGenerator(),
                     sheet_name=settings.google_sheet_name,
-                )()
+                )(None)
             return result.claimed, result.completed, reconciliation
     finally:
         await engine.dispose()

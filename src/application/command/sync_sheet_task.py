@@ -1,7 +1,10 @@
+"""Deliver one queued attendance change to Google Sheets."""
+
 import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from application.base_interactor import Interactor
 from observability import get_logger
 from port.clock import Clock
 from port.google_sheets import GoogleSheetsGateway
@@ -31,7 +34,7 @@ class RetryPolicy:
         return now + timedelta(seconds=raw_delay + jitter)
 
 
-class SheetSyncTaskHandler:
+class SheetSyncTaskHandler(Interactor[SheetSyncTask, bool]):
     def __init__(
         self,
         *,

@@ -6,7 +6,7 @@ from adapter.database.engine import create_engine, create_session_factory
 from adapter.database.repositories import SQLAlchemySheetStructureRepository
 from adapter.database.uow import SQLAlchemyUnitOfWork
 from adapter.google_sheets import GoogleApiSheetsValuesClient, GoogleSheetLayout, GoogleSheetsStructureSource
-from application.import_sheet_structure import ImportSheetStructureHandler
+from application.command.import_sheet_structure import ImportSheetStructureHandler
 from config.settings import Settings
 from observability import configure_logging, get_logger
 
@@ -48,7 +48,7 @@ async def run() -> None:
                 repository=SQLAlchemySheetStructureRepository(session, timezone=timezone),
                 uow=SQLAlchemyUnitOfWork(session),
                 clock=SystemClock(timezone),
-            )()
+            )(None)
         logger.info(
             "sheet_structure_import_completed",
             students_created=result.students_created,

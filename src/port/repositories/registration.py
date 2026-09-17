@@ -31,6 +31,8 @@ class RegistrationRepository(Protocol):
 
     async def list_active(self) -> list[RegistrationView]: ...
 
+    async def list_starosta_external_ids(self, provider: IdentityProvider) -> list[str]: ...
+
     async def get_active_by_external_id(
         self,
         provider: IdentityProvider,

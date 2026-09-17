@@ -52,7 +52,7 @@ Telegram / VK / CLI / worker
               │
               ▼
          application
-       commands / queries
+ commands / queries / services
               │
               ▼
             domain
@@ -87,13 +87,45 @@ Commands изменяют состояние:
 - `RegisterStudentHandler`;
 - `UnlinkRegistrationHandler`;
 - `MarkAttendanceHandler`;
+- `UpdateOwnAttendanceHandler`;
+- `CreateAttendanceRequestHandler`;
+- `DecideAttendanceRequestHandler`;
 - `ImportSheetStructureHandler`;
+- `ReconcileSheetAttendanceHandler`;
 - `SheetSyncTaskHandler`.
+
+Каждый use case реализует типизированный контракт
+`Interactor[InputDTO, OutputDTO]` из `application/base_interactor.py`. На границе
+presentation формируется один command/query DTO, после чего выполняется единый
+вызов `await interactor(dto)`. Репозитории и специальные методы обработчиков из
+presentation напрямую не вызываются.
+
+Сборка зависимостей разделена так же, как в референсных сервисах:
+
+- `ApplicationProvider` создаёт application-scoped настройки и технические зависимости;
+- `RepositoryProvider` связывает порты с SQLAlchemy-адаптерами в request scope;
+- `InteractorProvider` отдельно собирает application handlers из портов и политик;
+- presentation получает готовый interactor через `FromDishka[ConcreteHandler]`.
+
+Presentation импортирует тип конкретного handler и его input DTO напрямую из
+application — это ожидаемая внутренняя зависимость. Создание handler и знание о
+его репозиториях остаются только в DI composition root.
 
 Queries читают состояние:
 
 - `GetMyRegistrationHandler`;
-- `ListAvailableStudentsHandler`.
+- `ListAvailableStudentsHandler`;
+- `ListAttendanceDatesHandler` и `ListLessonsForDateHandler`;
+- `ListMyAttendanceHandler`;
+- `GetBonusBalanceHandler`;
+- `ListPendingAttendanceRequestsHandler`;
+- `ListStarostaExternalIdsHandler`.
+
+Долгоживущие координаторы нескольких use case находятся в
+`application/service`. Общие чистые application-политики, например расчёт
+границ учебной недели, находятся в `application/common`. Application-слой не
+импортирует `adapter`, `presentation`, `di` или `config`; это правило закреплено
+архитектурными тестами.
 
 Транзакционная граница задаётся через `UnitOfWork`. Изменение посещаемости,
 история и задача синхронизации сохраняются одной транзакцией.
@@ -123,7 +155,20 @@ Queries читают состояние:
 ### 3.5. Presentation
 
 `src/presentation/telegram` содержит фабрику `Dispatcher`, routers, типизированные
-callback DTO и keyboards. Реализованы `/start`, выбор свободного студента,
+callback DTO и keyboards. Presentation организован по пользовательским сценариям:
+
+- `routers/start.py` — регистрация;
+- `routers/attendance/marking.py` — выбор занятия и постановка отметки или заявки;
+- `routers/attendance/history.py` — просмотр и изменение собственных отметок;
+- `routers/attendance/navigation.py` — переходы между неделями и возврат в меню;
+- `routers/starosta.py` — заявки и управление привязками;
+- `keyboards/` — отдельные фабрики клавиатур регистрации, посещаемости и старосты;
+- `routers/attendance/support.py` — presentation-only форматирование заголовков и
+  отправка уже подготовленных уведомлений; application interactors из support-модулей
+  не вызываются.
+
+Пакет `routers/attendance` собирает feature-router’ы в своём `__init__.py`, поэтому `dispatcher`
+не зависит от их внутренней структуры. Реализованы `/start`, выбор свободного студента,
 подтверждение немедленной регистрации и переход в главное меню. Пункты меню
 посещаемости позволяют выбрать доступную дату, предмет и статус, подтвердить
 неизменяемую студентом отметку и сохранить её вместе с аудитом и задачей
@@ -173,7 +218,7 @@ VK-клиент создаёт тот же объект с `IdentityProvider.VK`
 | `lessons` | Импортированные и созданные занятия |
 | `attendance` | Текущий статус посещаемости |
 | `attendance_history` | Неизменяемая история изменения статусов |
-| `bonus_requests` | Запросы и решения по использованию `Б` |
+| `bonus_requests` | Запросы и решения по использованию `Б` и `У` (историческое имя таблицы) |
 | `attendance_settings` | Часовой пояс, лимит `Б`, режим изменения |
 | `sheet_mappings` | Координаты студентов и занятий в Sheets |
 | `sheet_sync_queue` | Дедуплицированная очередь экспорта |

@@ -1,6 +1,6 @@
 import pytest
 
-from application.sheet_reconciliation import _parse_status
+from application.command.reconcile_sheet_attendance import _parse_status
 from domain.vo.attendance_status import AttendanceStatus
 
 

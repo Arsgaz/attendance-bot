@@ -1,7 +1,7 @@
 from datetime import date
 from uuid import UUID, uuid4
 
-from application.query.list_my_attendance import ListMyAttendanceHandler
+from application.query.list_my_attendance import ListMyAttendanceHandler, ListMyAttendanceQuery
 from domain.vo.attendance_status import AttendanceStatus
 from port.repositories.attendance import AttendanceView
 
@@ -36,7 +36,7 @@ async def test_groups_my_attendance_by_monday_to_sunday_weeks() -> None:
         ),
     )
 
-    latest = await handler.by_week(student_id=uuid4())
+    latest = await handler(ListMyAttendanceQuery(student_id=uuid4()))
 
     assert latest is not None
     assert latest.week_start == date(2026, 9, 21)
@@ -45,10 +45,10 @@ async def test_groups_my_attendance_by_monday_to_sunday_weeks() -> None:
     assert latest.newer_week_start is None
     assert latest.older_week_start == date(2026, 9, 14)
 
-    previous = await handler.by_week(
+    previous = await handler(ListMyAttendanceQuery(
         student_id=uuid4(),
         week_start=date(2026, 9, 14),
-    )
+    ))
 
     assert previous is not None
     assert [record.lesson_date for record in previous.records] == [

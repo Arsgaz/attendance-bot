@@ -1,3 +1,4 @@
+from application.base_interactor import Interactor
 from application.dto.registration import RegisterStudentCommand
 from application.exceptions.registration import (
     ActiveRegistrationExistsError,
@@ -13,7 +14,7 @@ from port.unit_of_work import UnitOfWork
 logger = get_logger(__name__)
 
 
-class RegisterStudentHandler:
+class RegisterStudentHandler(Interactor[RegisterStudentCommand, Registration]):
     def __init__(
         self,
         *,

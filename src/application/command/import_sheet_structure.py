@@ -1,9 +1,12 @@
+"""Import the sheet-owned students and lessons into the local read model."""
+
+from application.base_interactor import Interactor
 from port.clock import Clock
 from port.sheet_structure import SheetImportResult, SheetStructureRepository, SheetStructureSource
 from port.unit_of_work import UnitOfWork
 
 
-class ImportSheetStructureHandler:
+class ImportSheetStructureHandler(Interactor[None, SheetImportResult]):
     def __init__(
         self,
         *,
@@ -17,7 +20,8 @@ class ImportSheetStructureHandler:
         self._uow = uow
         self._clock = clock
 
-    async def __call__(self) -> SheetImportResult:
+    async def __call__(self, data: None) -> SheetImportResult:
+        del data
         structure = await self._source.read_structure()
         try:
             result = await self._repository.import_structure(structure, now=self._clock.now())

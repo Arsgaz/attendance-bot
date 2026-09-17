@@ -12,7 +12,12 @@ from application.command.register_student import RegisterStudentHandler
 from application.command.unlink_registration import UnlinkRegistrationHandler
 from application.dto.registration import RegisterStudentCommand, UnlinkRegistrationCommand
 from application.exceptions.registration import ActiveRegistrationExistsError
-from application.query import GetMyRegistrationHandler, ListAvailableStudentsHandler
+from application.query import (
+    GetMyRegistrationHandler,
+    GetMyRegistrationQuery,
+    ListAvailableStudentsHandler,
+    ListAvailableStudentsQuery,
+)
 from domain.registration import RegistrationStatus
 from domain.vo.actor import IdentityProvider
 
@@ -96,7 +101,7 @@ async def test_immediate_registration_and_admin_unlink_flow(tmp_path: Path) -> N
 
         async with session_factory() as session:
             repository = SQLAlchemyRegistrationRepository(session)
-            available = await ListAvailableStudentsHandler(repository)()
+            available = await ListAvailableStudentsHandler(repository)(ListAvailableStudentsQuery())
             assert [item.id for item in available] == [student_id, vk_student_id]
             register = RegisterStudentHandler(
                 repository=repository,
@@ -141,7 +146,10 @@ async def test_immediate_registration_and_admin_unlink_flow(tmp_path: Path) -> N
 
         async with session_factory() as session:
             repository = SQLAlchemyRegistrationRepository(session)
-            active = await GetMyRegistrationHandler(repository)(IdentityProvider.TELEGRAM, "42")
+            active = await GetMyRegistrationHandler(repository)(GetMyRegistrationQuery(
+                provider=IdentityProvider.TELEGRAM,
+                external_user_id="42",
+            ))
             assert active is not None
             assert active.status is RegistrationStatus.APPROVED
             unlink = UnlinkRegistrationHandler(
@@ -159,8 +167,15 @@ async def test_immediate_registration_and_admin_unlink_flow(tmp_path: Path) -> N
 
         async with session_factory() as session:
             repository = SQLAlchemyRegistrationRepository(session)
-            assert await GetMyRegistrationHandler(repository)(IdentityProvider.TELEGRAM, "42") is None
-            assert [item.id for item in await ListAvailableStudentsHandler(repository)()] == [student_id]
-            assert await GetMyRegistrationHandler(repository)(IdentityProvider.VK, "42") is not None
+            assert await GetMyRegistrationHandler(repository)(GetMyRegistrationQuery(
+                provider=IdentityProvider.TELEGRAM,
+                external_user_id="42",
+            )) is None
+            available = await ListAvailableStudentsHandler(repository)(ListAvailableStudentsQuery())
+            assert [item.id for item in available] == [student_id]
+            assert await GetMyRegistrationHandler(repository)(GetMyRegistrationQuery(
+                provider=IdentityProvider.VK,
+                external_user_id="42",
+            )) is not None
     finally:
         await engine.dispose()
