@@ -47,13 +47,19 @@ cp attendance.db runtime/attendance.db
 ```bash
 docker compose up --build -d
 docker compose ps
-docker compose logs -f telegram-bot vk-bot worker backup
+docker compose logs -f telegram-bot vk-bot worker notification-worker backup
 ```
 
 После `start_period` в `docker compose ps` все постоянные сервисы должны иметь
 статус `healthy`. Healthcheck проверяет доступность БД и актуальную Alembic
-revision. Для worker и backup дополнительно проверяется heartbeat рабочего
+revision. Для worker, notification-worker и backup дополнительно проверяется heartbeat рабочего
 цикла; доступность Google API на readiness не влияет.
+
+ID из `BOOTSTRAP_OWNER_TELEGRAM_IDS` и `BOOTSTRAP_OWNER_VK_IDS` при запуске
+однократно преобразуются в общую студенческую роль `owner`. После этого владелец
+управляет старостами с любой привязанной платформы. Назначение роли создаёт
+transactional outbox-задания, после чего
+`notification-worker` отправляет пользователю новую клавиатуру Telegram/VK.
 
 ## Резервное копирование
 

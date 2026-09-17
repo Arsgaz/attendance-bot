@@ -161,7 +161,7 @@ def upgrade() -> None:
         sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("revoked_by_student_id", sa.Uuid(), nullable=True),
         sa.Column("id", sa.Uuid(), nullable=False),
-        sa.CheckConstraint("role IN ('starosta')", name="ck_student_roles_role"),
+        sa.CheckConstraint("role IN ('starosta', 'owner')", name="ck_student_roles_role"),
         sa.ForeignKeyConstraint(["assigned_by_student_id"], ["students.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["revoked_by_student_id"], ["students.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["student_id"], ["students.id"], ondelete="CASCADE"),

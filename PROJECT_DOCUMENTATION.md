@@ -72,7 +72,7 @@ Presentation не обращается к ORM или Google Sheets напрям�
 Отвязка не удаляет студента, посещаемость или аудит.
 
 Роль старосты хранится на студенте, поэтому действует во всех его привязанных
-клиентах. `ADMIN_TELEGRAM_IDS` и `ADMIN_VK_IDS` используются для начального
+клиентах. `BOOTSTRAP_OWNER_TELEGRAM_IDS` и `BOOTSTRAP_OWNER_VK_IDS` используются для начального
 назначения роли по числовому ID платформы; username для авторизации не подходит.
 
 ### Посещаемость
@@ -180,8 +180,9 @@ SQLite работает с foreign keys, WAL и `busy_timeout`. Для теку�
 | `GOOGLE_CREDENTIALS_FILE` | Путь к JSON service account |
 | `DEFAULT_TIMEZONE` | Часовой пояс правил недели |
 | `BONUS_WEEKLY_LIMIT` | Недельный лимит `Б` |
-| `ADMIN_TELEGRAM_IDS` | JSON-массив числовых Telegram ID для bootstrap роли |
-| `ADMIN_VK_IDS` | JSON-массив числовых VK ID для bootstrap роли |
+| `BOOTSTRAP_OWNER_TELEGRAM_IDS` | Telegram ID для первоначальной роли владельца |
+| `BOOTSTRAP_OWNER_VK_IDS` | VK ID для первоначальной роли владельца |
+| `ROLE_NOTIFICATION_*` | Интервалы, блокировка и retry уведомлений о ролях |
 | `SHEET_RECONCILIATION_INTERVAL_SECONDS` | Период чтения ручных правок |
 | `BACKUP_*` | Интервал, каталог и политика хранения снимков |
 | `OBSERVABILITY_HASH_KEY` | Секретный ключ стабильной псевдонимизации platform ID |
@@ -199,7 +200,7 @@ cp .env.example .env
 mkdir -p runtime backups secrets
 docker compose up --build -d
 docker compose ps
-docker compose logs -f telegram-bot vk-bot worker backup
+docker compose logs -f telegram-bot vk-bot worker notification-worker backup
 ```
 
 Сервисы:
@@ -208,7 +209,16 @@ docker compose logs -f telegram-bot vk-bot worker backup
 - `telegram-bot` обрабатывает Telegram;
 - `vk-bot` обрабатывает VK;
 - `worker` синхронизирует Google Sheets;
+- `notification-worker` доставляет изменения ролей в Telegram и VK;
 - `backup` создаёт снимки SQLite.
+
+Bootstrap ID при запуске сопоставляются со студентами и сохраняются как роль
+`owner`. Поэтому владелец получает управление старостами на всех своих
+привязанных платформах. Назначение/снятие роли и постановка
+platform-уведомлений выполняются в одной транзакции. Таблица
+`role_notification_queue` обеспечивает повторную доставку новой клавиатуры при
+временной недоступности Telegram или VK. Обычный староста не может назначать
+или снимать роли.
 
 Обновление структуры таблицы:
 
@@ -224,8 +234,9 @@ docker compose down
 
 ## 8. Миграции и тесты
 
-Актуальная история начинается с единой ревизии `ddb75d1bb7c0`, создающей всю
-схему с нуля. Старые development-ревизии удалены. Существующую БД со старым
+Актуальная история начинается с единой ревизии `ddb75d1bb7c0`; последующие
+изменения применяются обычными миграциями Alembic. Старые development-ревизии
+удалены. Существующую БД со старым
 значением `alembic_version` необходимо сначала сохранить и пересоздать либо
 вручную сверить со схемой перед сменой revision через `alembic stamp`.
 

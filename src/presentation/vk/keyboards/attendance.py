@@ -167,7 +167,9 @@ def manage_attendance_keyboard(attendance_id: str) -> str:
             ),
             KeyboardButtonColor.PRIMARY,
         )
-    keyboard.row()
+        # VK renders several long labels in one row too narrowly, especially
+        # on mobile clients. Give every status the full row width.
+        keyboard.row()
     keyboard.add(
         Text("Удалить отметку", {"action": "delete_attendance", "attendance_id": attendance_id}),
         KeyboardButtonColor.NEGATIVE,

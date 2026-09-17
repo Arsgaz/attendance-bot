@@ -12,8 +12,8 @@ from adapter.database.engine import create_engine
 from config.settings import Settings
 from observability.heartbeat import ensure_fresh_heartbeat, heartbeat_path
 
-HEARTBEAT_SERVICES = {"worker", "backup"}
-SERVICES = ("telegram-bot", "vk-bot", "worker", "backup")
+HEARTBEAT_SERVICES = {"worker", "notification-worker", "backup"}
+SERVICES = ("telegram-bot", "vk-bot", "worker", "notification-worker", "backup")
 
 
 async def check_database(settings: Settings) -> str:
@@ -33,6 +33,8 @@ async def check_database(settings: Settings) -> str:
 def heartbeat_max_age(settings: Settings, service: str) -> float:
     if service == "worker":
         return max(30.0, settings.sync_queue_poll_interval_seconds * 3.0)
+    if service == "notification-worker":
+        return max(30.0, settings.role_notification_poll_interval_seconds * 3.0)
     if service == "backup":
         return settings.backup_interval_seconds + max(
             300.0,

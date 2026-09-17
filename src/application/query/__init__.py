@@ -19,14 +19,21 @@ from application.query.list_linked_students import (
     ListLinkedStudentsHandler,
     ListLinkedStudentsQuery,
 )
+from application.query.list_managed_students import ListManagedStudentsHandler, ListManagedStudentsQuery
 from application.query.list_my_attendance import ListMyAttendanceHandler, ListMyAttendanceQuery
 from application.query.list_pending_attendance_requests import (
     ListPendingAttendanceRequestsHandler,
     ListPendingAttendanceRequestsQuery,
 )
 from application.query.list_starostas import ListStarostaExternalIdsHandler, ListStarostaExternalIdsQuery
+from application.query.list_student_attendance import (
+    ListStudentAttendanceHandler,
+    ListStudentAttendanceQuery,
+)
 
 __all__ = [
+    "CheckOwnerAccessHandler",
+    "CheckOwnerAccessQuery",
     "GetMyRegistrationHandler",
     "GetMyRegistrationQuery",
     "ListAttendanceDatesHandler",
@@ -36,12 +43,16 @@ __all__ = [
     "LinkedStudentView",
     "ListLinkedStudentsHandler",
     "ListLinkedStudentsQuery",
+    "ListManagedStudentsHandler",
+    "ListManagedStudentsQuery",
     "ListAvailableStudentsHandler",
     "ListAvailableStudentsQuery",
     "ListLessonsForDateHandler",
     "ListLessonsForDateQuery",
     "ListMyAttendanceHandler",
     "ListMyAttendanceQuery",
+    "ListStudentAttendanceHandler",
+    "ListStudentAttendanceQuery",
     "ListStarostaExternalIdsHandler",
     "ListStarostaExternalIdsQuery",
     "BonusBalance",
@@ -50,3 +61,4 @@ __all__ = [
     "ListPendingAttendanceRequestsHandler",
     "ListPendingAttendanceRequestsQuery",
 ]
+from application.query.check_owner_access import CheckOwnerAccessHandler, CheckOwnerAccessQuery

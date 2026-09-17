@@ -35,7 +35,7 @@ class StudentRoleModel(UUIDPrimaryKeyMixin, Base):
     )
 
     __table_args__ = (
-        CheckConstraint("role IN ('starosta')", name="ck_student_roles_role"),
+        CheckConstraint("role IN ('starosta', 'owner')", name="ck_student_roles_role"),
         Index(
             "uq_student_roles_active",
             "student_id",

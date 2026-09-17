@@ -1,23 +1,101 @@
+from datetime import date
+
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from application.query.list_linked_students import LinkedStudentView
 from port.repositories.attendance_requests import AttendanceRequestView
+from port.repositories.student_roles import ManagedStudentView
 from presentation.telegram.callbacks import (
     AttendanceRequestDecisionCallback,
     ConfirmUnlinkAccountCallback,
     ConfirmUnlinkAllStudentAccountsCallback,
+    ManageStudentRoleCallback,
+    SetStudentRoleCallback,
     StudentAccountsCallback,
+    StudentAttendanceCallback,
+    StudentAttendanceWeekCallback,
     UnlinkAccountCallback,
     UnlinkAllStudentAccountsCallback,
 )
 
 
-def starosta_menu_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
+def starosta_menu_keyboard(*, is_owner: bool = False) -> InlineKeyboardMarkup:
+    rows = [
         [InlineKeyboardButton(text="Заявки Б и У", callback_data="admin:bonus")],
         [InlineKeyboardButton(text="Привязки пользователей", callback_data="admin:links")],
+    ]
+    rows.append([InlineKeyboardButton(text="Студенты", callback_data="admin:roles")])
+    rows.append([InlineKeyboardButton(text="Отмена", callback_data="admin:cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def managed_students_keyboard(students: list[ManagedStudentView]) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(
+        text=("👑 " if student.is_owner else "⭐ " if student.is_starosta else "")
+        + _short_name(student.full_name),
+        callback_data=ManageStudentRoleCallback(student_id=str(student.id)).pack(),
+    )] for student in students]
+    rows.append(_starosta_navigation_row())
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def manage_student_role_keyboard(
+    student: ManagedStudentView,
+    *,
+    can_manage_roles: bool,
+) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(
+        text="Посещаемость",
+        callback_data=StudentAttendanceCallback(student_id=str(student.id)).pack(),
+    )]]
+    if can_manage_roles and not student.is_owner:
+        action = "Снять роль старосты" if student.is_starosta else "Назначить старостой"
+        rows.append([InlineKeyboardButton(
+            text=action,
+            callback_data=SetStudentRoleCallback(
+                student_id=str(student.id),
+                enabled=0 if student.is_starosta else 1,
+            ).pack(),
+        )])
+    rows.extend([
+        [InlineKeyboardButton(text="Назад", callback_data="admin:roles")],
         [InlineKeyboardButton(text="Отмена", callback_data="admin:cancel")],
     ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def student_attendance_keyboard(
+    student_id: str,
+    *,
+    newer_week_start: date | None = None,
+    older_week_start: date | None = None,
+) -> InlineKeyboardMarkup:
+    navigation: list[InlineKeyboardButton] = []
+    if older_week_start is not None:
+        navigation.append(InlineKeyboardButton(
+            text="← Предыдущая неделя",
+            callback_data=StudentAttendanceWeekCallback(
+                student_id=student_id,
+                week_start=older_week_start.isoformat(),
+            ).pack(),
+        ))
+    if newer_week_start is not None:
+        navigation.append(InlineKeyboardButton(
+            text="Следующая неделя →",
+            callback_data=StudentAttendanceWeekCallback(
+                student_id=student_id,
+                week_start=newer_week_start.isoformat(),
+            ).pack(),
+        ))
+    rows = [navigation] if navigation else []
+    rows.extend([
+        [InlineKeyboardButton(
+            text="Назад к студенту",
+            callback_data=ManageStudentRoleCallback(student_id=student_id).pack(),
+        )],
+        [InlineKeyboardButton(text="Отмена", callback_data="admin:cancel")],
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def attendance_requests_keyboard(requests: list[AttendanceRequestView]) -> InlineKeyboardMarkup:
@@ -114,3 +192,7 @@ def _starosta_navigation_row() -> list[InlineKeyboardButton]:
         InlineKeyboardButton(text="Назад", callback_data="admin:back"),
         InlineKeyboardButton(text="Отмена", callback_data="admin:cancel"),
     ]
+
+
+def _short_name(value: str) -> str:
+    return value if len(value) <= 55 else value[:54] + "…"

@@ -8,6 +8,7 @@ from domain.lesson.entity import Subgroup
 
 class StudentRole(StrEnum):
     STAROSTA = "starosta"
+    OWNER = "owner"
 
 
 @dataclass(kw_only=True)
@@ -23,4 +24,8 @@ class Student(Entity[UUID]):
 
     @property
     def is_starosta(self) -> bool:
-        return self.has_role(StudentRole.STAROSTA)
+        return self.has_role(StudentRole.STAROSTA) or self.has_role(StudentRole.OWNER)
+
+    @property
+    def is_owner(self) -> bool:
+        return self.has_role(StudentRole.OWNER)

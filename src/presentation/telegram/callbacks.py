@@ -75,3 +75,21 @@ class UnlinkAllStudentAccountsCallback(CallbackData, prefix="unlink_all_accounts
 
 class ConfirmUnlinkAllStudentAccountsCallback(CallbackData, prefix="confirm_unlink_all"):
     student_id: str
+
+
+class ManageStudentRoleCallback(CallbackData, prefix="manage_role"):
+    student_id: str
+
+
+class SetStudentRoleCallback(CallbackData, prefix="set_role"):
+    student_id: str
+    enabled: int
+
+
+class StudentAttendanceCallback(CallbackData, prefix="student_att"):
+    student_id: str
+
+
+class StudentAttendanceWeekCallback(CallbackData, prefix="student_att_w"):
+    student_id: str
+    week_start: str

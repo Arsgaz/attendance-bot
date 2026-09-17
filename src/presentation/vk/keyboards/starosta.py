@@ -1,13 +1,15 @@
 from collections.abc import Sequence
+from datetime import date
 
 from vkbottle import Keyboard, KeyboardButtonColor, Text
 
 from application.query.list_linked_students import LinkedStudentView
 from port.repositories.attendance_requests import AttendanceRequestView
+from port.repositories.student_roles import ManagedStudentView
 from presentation.vk.keyboards.support import shorten_button_label
 
 
-def starosta_menu_keyboard() -> str:
+def starosta_menu_keyboard(*, is_owner: bool = False) -> str:
     keyboard = Keyboard(one_time=False)
     keyboard.add(
         Text("Заявки Б и У", {"action": "starosta_requests", "page": 0}),
@@ -16,6 +18,127 @@ def starosta_menu_keyboard() -> str:
     keyboard.row()
     keyboard.add(
         Text("Привязки пользователей", {"action": "starosta_links", "page": 0}),
+        KeyboardButtonColor.SECONDARY,
+    )
+    keyboard.row()
+    keyboard.add(
+        Text("Студенты", {"action": "owner_roles", "page": 0}),
+        KeyboardButtonColor.POSITIVE,
+    )
+    keyboard.row()
+    keyboard.add(Text("Отмена", {"action": "starosta_cancel"}), KeyboardButtonColor.NEGATIVE)
+    return keyboard.get_json()
+
+
+def managed_students_keyboard(
+    students: Sequence[ManagedStudentView],
+    *,
+    page: int,
+    has_previous: bool,
+    has_next: bool,
+) -> str:
+    keyboard = Keyboard(one_time=False)
+    for student in students:
+        keyboard.add(
+            Text(
+                shorten_button_label(
+                    ("👑 " if student.is_owner else "⭐ " if student.is_starosta else "")
+                    + student.full_name
+                ),
+                {"action": "owner_student_role", "student_id": str(student.id), "page": page},
+            ),
+            KeyboardButtonColor.SECONDARY,
+        )
+        keyboard.row()
+    _add_page_navigation(
+        keyboard,
+        action="owner_roles",
+        page=page,
+        has_previous=has_previous,
+        has_next=has_next,
+    )
+    _add_starosta_navigation(keyboard)
+    return keyboard.get_json()
+
+
+def manage_student_role_keyboard(
+    student: ManagedStudentView,
+    *,
+    page: int,
+    can_manage_roles: bool,
+) -> str:
+    keyboard = Keyboard(one_time=False)
+    keyboard.add(
+        Text(
+            "Посещаемость",
+            {"action": "student_attendance", "student_id": str(student.id), "page": page},
+        ),
+        KeyboardButtonColor.PRIMARY,
+    )
+    keyboard.row()
+    if can_manage_roles and not student.is_owner:
+        keyboard.add(
+            Text(
+                "Снять роль старосты" if student.is_starosta else "Назначить старостой",
+                {
+                    "action": "owner_set_role",
+                    "student_id": str(student.id),
+                    "enabled": 0 if student.is_starosta else 1,
+                    "page": page,
+                },
+            ),
+            KeyboardButtonColor.NEGATIVE if student.is_starosta else KeyboardButtonColor.POSITIVE,
+        )
+        keyboard.row()
+    keyboard.add(
+        Text("Назад", {"action": "owner_roles", "page": page}),
+        KeyboardButtonColor.SECONDARY,
+    )
+    keyboard.add(Text("Отмена", {"action": "starosta_cancel"}), KeyboardButtonColor.NEGATIVE)
+    return keyboard.get_json()
+
+
+def student_attendance_keyboard(
+    student_id: str,
+    *,
+    page: int,
+    newer_week_start: date | None = None,
+    older_week_start: date | None = None,
+) -> str:
+    keyboard = Keyboard(one_time=False)
+    if older_week_start is not None:
+        keyboard.add(
+            Text(
+                "← Предыдущая неделя",
+                {
+                    "action": "student_attendance",
+                    "student_id": student_id,
+                    "week_start": older_week_start.isoformat(),
+                    "page": page,
+                },
+            ),
+            KeyboardButtonColor.SECONDARY,
+        )
+    if newer_week_start is not None:
+        keyboard.add(
+            Text(
+                "Следующая неделя →",
+                {
+                    "action": "student_attendance",
+                    "student_id": student_id,
+                    "week_start": newer_week_start.isoformat(),
+                    "page": page,
+                },
+            ),
+            KeyboardButtonColor.SECONDARY,
+        )
+    if older_week_start is not None or newer_week_start is not None:
+        keyboard.row()
+    keyboard.add(
+        Text(
+            "Назад к студенту",
+            {"action": "owner_student_role", "student_id": student_id, "page": page},
+        ),
         KeyboardButtonColor.SECONDARY,
     )
     keyboard.row()

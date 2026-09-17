@@ -72,7 +72,7 @@ class SQLAlchemyRegistrationRepository:
             .where(
                 ExternalAccountModel.provider == provider.value,
                 ExternalAccountModel.status == ACTIVE_STATUS,
-                StudentRoleModel.role == "starosta",
+                StudentRoleModel.role.in_(("starosta", "owner")),
                 StudentRoleModel.revoked_at.is_(None),
             )
         )
@@ -140,7 +140,7 @@ class SQLAlchemyRegistrationRepository:
                 ExternalAccountModel.external_user_id == external_user_id,
                 ExternalAccountModel.status == RegistrationStatus.APPROVED.value,
                 StudentRoleModel.student_id == ExternalAccountModel.student_id,
-                StudentRoleModel.role == "starosta",
+                StudentRoleModel.role.in_(("starosta", "owner")),
                 StudentRoleModel.revoked_at.is_(None),
             ),
         )

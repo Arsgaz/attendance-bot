@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from dishka import Provider, Scope, provide
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from adapter.authorization import DatabaseOwnerAuthorizer
 from adapter.clock.system import SystemClock
 from adapter.database.engine import create_engine, create_session_factory
 from adapter.database.repositories import (
@@ -11,7 +12,9 @@ from adapter.database.repositories import (
     SQLAlchemyAttendanceRepository,
     SQLAlchemyAttendanceRequestRepository,
     SQLAlchemyLessonRepository,
+    SQLAlchemyRoleNotificationRepository,
     SQLAlchemySheetSyncQueueRepository,
+    SQLAlchemyStudentRoleRepository,
 )
 from adapter.database.repositories.registration import SQLAlchemyRegistrationRepository
 from adapter.database.uow import SQLAlchemyUnitOfWork
@@ -19,13 +22,16 @@ from adapter.id_generator.uuid import UUIDGenerator
 from config.settings import Settings
 from domain.attendance.policies import BonusEligibilityPolicy
 from domain.vo.actor import IdentityProvider
+from port.authorization import OwnerAuthorizer
 from port.clock import Clock
 from port.id_generator import IdGenerator
 from port.repositories.attendance import AttendanceHistoryRepository, AttendanceRepository
 from port.repositories.attendance_requests import AttendanceRequestRepository
 from port.repositories.lessons import LessonRepository
 from port.repositories.registration import RegistrationRepository
+from port.repositories.role_notifications import RoleNotificationRepository
 from port.repositories.sheet_sync_queue import SheetSyncQueueRepository
+from port.repositories.student_roles import StudentRoleRepository
 from port.unit_of_work import UnitOfWork
 
 
@@ -60,7 +66,6 @@ class ApplicationProvider(Provider):
     def bonus_policy(self, settings: Settings) -> BonusEligibilityPolicy:
         return BonusEligibilityPolicy(weekly_limit=settings.bonus_weekly_limit)
 
-
 class RepositoryProvider(Provider):
     scope = Scope.REQUEST
 
@@ -81,8 +86,26 @@ class RepositoryProvider(Provider):
         return SQLAlchemyRegistrationRepository(
             session,
             {
-                IdentityProvider.TELEGRAM: {str(value) for value in settings.admin_telegram_ids},
-                IdentityProvider.VK: {str(value) for value in settings.admin_vk_ids},
+                IdentityProvider.TELEGRAM: {
+                    str(value) for value in settings.bootstrap_owner_telegram_ids
+                },
+                IdentityProvider.VK: {str(value) for value in settings.bootstrap_owner_vk_ids},
+            },
+        )
+
+    @provide(provides=OwnerAuthorizer)
+    def owner_authorizer(
+        self,
+        session: AsyncSession,
+        settings: Settings,
+    ) -> DatabaseOwnerAuthorizer:
+        return DatabaseOwnerAuthorizer(
+            session,
+            {
+                IdentityProvider.TELEGRAM: {
+                    str(value) for value in settings.bootstrap_owner_telegram_ids
+                },
+                IdentityProvider.VK: {str(value) for value in settings.bootstrap_owner_vk_ids},
             },
         )
 
@@ -117,3 +140,11 @@ class RepositoryProvider(Provider):
     @provide(provides=SheetSyncQueueRepository)
     def sync_queue(self, session: AsyncSession) -> SQLAlchemySheetSyncQueueRepository:
         return SQLAlchemySheetSyncQueueRepository(session)
+
+    @provide(provides=StudentRoleRepository)
+    def student_roles(self, session: AsyncSession, clock: Clock) -> SQLAlchemyStudentRoleRepository:
+        return SQLAlchemyStudentRoleRepository(session, clock)
+
+    @provide(provides=RoleNotificationRepository)
+    def role_notifications(self, session: AsyncSession) -> SQLAlchemyRoleNotificationRepository:
+        return SQLAlchemyRoleNotificationRepository(session)

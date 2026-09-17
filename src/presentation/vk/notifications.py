@@ -2,7 +2,7 @@ from vkbottle.bot import Bot
 
 from observability import get_logger
 from port.notifications import AttendanceRequestNotification
-from presentation.vk.keyboards import attendance_request_decision_keyboard
+from presentation.vk.keyboards import attendance_request_decision_keyboard, main_menu_keyboard
 
 logger = get_logger(__name__)
 
@@ -36,3 +36,11 @@ class VkNotificationChannel:
                 provider="vk",
                 error_type=type(error).__name__,
             )
+
+    async def send_role_changed(self, recipient_id: str, *, is_starosta: bool) -> None:
+        await self._bot.api.messages.send(
+            peer_id=int(recipient_id),
+            random_id=0,
+            message="Вам назначена роль старосты" if is_starosta else "Роль старосты снята",
+            keyboard=main_menu_keyboard(is_starosta=is_starosta),
+        )

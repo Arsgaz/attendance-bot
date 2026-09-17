@@ -5,6 +5,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from observability import get_logger
 from port.notifications import AttendanceRequestNotification
 from presentation.telegram.callbacks import AttendanceRequestDecisionCallback
+from presentation.telegram.keyboards import main_menu_keyboard
 
 logger = get_logger(__name__)
 
@@ -37,6 +38,14 @@ class TelegramNotificationChannel:
                 provider="telegram",
                 error_type=type(error).__name__,
             )
+
+    async def send_role_changed(self, recipient_id: str, *, is_starosta: bool) -> None:
+        await self._bot.send_message(
+            chat_id=int(recipient_id),
+            text="Вам назначена роль старосты" if is_starosta else "Роль старосты снята",
+            reply_markup=main_menu_keyboard(is_starosta=is_starosta),
+        )
+
 
 
 def _decision_keyboard(request_id: object) -> InlineKeyboardMarkup:

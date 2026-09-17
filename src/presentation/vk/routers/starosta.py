@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Any
 from uuid import UUID
 
@@ -8,6 +9,12 @@ from application.command.decide_attendance_request import (
     DecideAttendanceRequestCommand,
     DecideAttendanceRequestHandler,
 )
+from application.command.set_student_starosta import (
+    OwnerRoleCannotBeRevokedError,
+    SetStudentStarostaCommand,
+    SetStudentStarostaHandler,
+    StudentNotFoundError,
+)
 from application.command.unlink_registration import UnlinkRegistrationHandler
 from application.command.unlink_student_accounts import UnlinkStudentAccountsHandler
 from application.dto.registration import UnlinkRegistrationCommand, UnlinkStudentAccountsCommand
@@ -16,11 +23,17 @@ from application.exceptions.registration import (
     RegistrationNotFoundError,
 )
 from application.query import (
+    CheckOwnerAccessHandler,
+    CheckOwnerAccessQuery,
     GetMyRegistrationHandler,
     GetMyRegistrationQuery,
     LinkedStudentView,
     ListLinkedStudentsHandler,
     ListLinkedStudentsQuery,
+    ListManagedStudentsHandler,
+    ListManagedStudentsQuery,
+    ListStudentAttendanceHandler,
+    ListStudentAttendanceQuery,
 )
 from application.query.list_pending_attendance_requests import (
     ListPendingAttendanceRequestsHandler,
@@ -34,9 +47,12 @@ from presentation.vk.keyboards import (
     attendance_request_decision_keyboard,
     attendance_requests_keyboard,
     main_menu_keyboard,
+    manage_student_role_keyboard,
+    managed_students_keyboard,
     starosta_menu_keyboard,
     starosta_navigation_keyboard,
     student_accounts_keyboard,
+    student_attendance_keyboard,
     unlink_all_accounts_confirmation_keyboard,
     unlink_registration_confirmation_keyboard,
 )
@@ -65,6 +81,18 @@ class VkStarostaFlow:
         if action == "starosta_links":
             await self._show_links(message, _parse_page(payload.get("page")))
             return True
+        if action == "owner_roles":
+            await self._show_roles(message, _parse_page(payload.get("page")))
+            return True
+        if action == "owner_student_role":
+            await self._show_student_role(message, payload)
+            return True
+        if action == "owner_set_role":
+            await self._set_student_role(message, payload)
+            return True
+        if action == "student_attendance":
+            await self._show_student_attendance(message, payload)
+            return True
         if action == "starosta_student_links":
             await self._show_student_links(message, payload)
             return True
@@ -89,7 +117,119 @@ class VkStarostaFlow:
         if not await self._is_starosta(message.from_id):
             await message.answer("Недостаточно прав")
             return
-        await message.answer("Меню старосты", keyboard=starosta_menu_keyboard())
+        await message.answer(
+            "Меню старосты",
+            keyboard=starosta_menu_keyboard(is_owner=await self._is_owner(message.from_id)),
+        )
+
+    async def _show_roles(self, message: Message, page: int) -> None:
+        students = await self._managed_students(message)
+        if students is None:
+            return
+        visible, page, max_page = _page(students, page)
+        await message.answer(
+            f"Студенты · страница {page + 1} из {max_page + 1}. "
+            "👑 — владелец, ⭐ — староста",
+            keyboard=managed_students_keyboard(
+                visible,
+                page=page,
+                has_previous=page > 0,
+                has_next=page < max_page,
+            ),
+        )
+
+    async def _show_student_role(self, message: Message, payload: dict[str, Any]) -> None:
+        student_id = _parse_uuid(payload.get("student_id"))
+        students = await self._managed_students(message)
+        student = next((item for item in students or [] if item.id == student_id), None)
+        if student is None:
+            await message.answer("Студент недоступен")
+            return
+        accounts = ", ".join(account.provider.value for account in student.accounts) or "нет привязок"
+        await message.answer(
+            f"{student.full_name}\nПодгруппа: {student.subgroup}\n"
+            f"Платформы: {accounts}\n"
+            f"Роль: {'владелец' if student.is_owner else 'староста' if student.is_starosta else 'студент'}",
+            keyboard=manage_student_role_keyboard(
+                student,
+                page=_parse_page(payload.get("page")),
+                can_manage_roles=await self._is_owner(message.from_id),
+            ),
+        )
+
+    async def _show_student_attendance(
+        self,
+        message: Message,
+        payload: dict[str, Any],
+    ) -> None:
+        student_id = _parse_uuid(payload.get("student_id"))
+        if student_id is None:
+            await message.answer("Посещаемость недоступна")
+            return
+        try:
+            week_start_value = payload.get("week_start")
+            week_start = date.fromisoformat(str(week_start_value)) if week_start_value else None
+            async with self._container() as request:
+                handler = await request.get(ListStudentAttendanceHandler)
+                result = await handler(ListStudentAttendanceQuery(
+                    actor_provider=IdentityProvider.VK,
+                    actor_external_user_id=str(message.from_id),
+                    student_id=student_id,
+                    week_start=week_start,
+                ))
+        except (ValueError, LookupError, PermissionError):
+            await message.answer("Посещаемость недоступна")
+            return
+        list_page = _parse_page(payload.get("page"))
+        attendance_page = result.attendance
+        if attendance_page is None:
+            await message.answer(
+                f"{result.student_full_name}\n\nПока нет сохранённых отметок",
+                keyboard=student_attendance_keyboard(str(student_id), page=list_page),
+            )
+            return
+        records = "\n".join(
+            f"{item.lesson_date:%d.%m} · {item.subject} · {item.status.display_symbol}"
+            for item in attendance_page.records
+        )
+        await message.answer(
+            f"{result.student_full_name}\n"
+            f"Неделя {attendance_page.week_start:%d.%m}–"
+            f"{attendance_page.week_end:%d.%m}\n\n{records}",
+            keyboard=student_attendance_keyboard(
+                str(student_id),
+                page=list_page,
+                newer_week_start=attendance_page.newer_week_start,
+                older_week_start=attendance_page.older_week_start,
+            ),
+        )
+
+    async def _set_student_role(self, message: Message, payload: dict[str, Any]) -> None:
+        student_id = _parse_uuid(payload.get("student_id"))
+        if student_id is None:
+            await message.answer("Студент недоступен")
+            return
+        enabled = str(payload.get("enabled")) == "1"
+        try:
+            async with self._container() as request:
+                handler = await request.get(SetStudentStarostaHandler)
+                changed = await handler(SetStudentStarostaCommand(
+                    student_id=student_id,
+                    enabled=enabled,
+                    actor_provider=IdentityProvider.VK,
+                    actor_external_user_id=str(message.from_id),
+                ))
+        except OwnerRoleCannotBeRevokedError:
+            await message.answer("Нельзя снять роль bootstrap-владельца")
+            return
+        except (PermissionError, StudentNotFoundError):
+            await message.answer("Не удалось изменить роль")
+            return
+        result = "Роль старосты назначена" if enabled else "Роль старосты снята"
+        if not changed:
+            result = "Роль уже была в выбранном состоянии"
+        await message.answer(result)
+        await self._show_roles(message, _parse_page(payload.get("page")))
 
     async def _show_requests(self, message: Message, page: int) -> None:
         requests = await self._pending_requests(message)
@@ -330,6 +470,26 @@ class VkStarostaFlow:
                 external_user_id=str(external_user_id),
             ))
         return registration is not None and registration.is_starosta
+
+    async def _is_owner(self, external_user_id: int) -> bool:
+        async with self._container() as request:
+            check_owner = await request.get(CheckOwnerAccessHandler)
+            return await check_owner(CheckOwnerAccessQuery(
+                provider=IdentityProvider.VK,
+                external_user_id=str(external_user_id),
+            ))
+
+    async def _managed_students(self, message: Message):
+        try:
+            async with self._container() as request:
+                handler = await request.get(ListManagedStudentsHandler)
+                return await handler(ListManagedStudentsQuery(
+                    provider=IdentityProvider.VK,
+                    external_user_id=str(message.from_id),
+                ))
+        except PermissionError:
+            await message.answer("Недостаточно прав")
+            return None
 
 
 def _request_text(request: AttendanceRequestView) -> str:

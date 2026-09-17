@@ -25,8 +25,19 @@ class Settings(BaseSettings):
     google_service_date_column: str = "AC"
     default_timezone: str = "Europe/Moscow"
     bonus_weekly_limit: int = 3
-    admin_telegram_ids: list[int] = Field(default_factory=list)
-    admin_vk_ids: list[int] = Field(default_factory=list)
+    bootstrap_owner_telegram_ids: list[int] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("BOOTSTRAP_OWNER_TELEGRAM_IDS", "ADMIN_TELEGRAM_IDS"),
+    )
+    bootstrap_owner_vk_ids: list[int] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("BOOTSTRAP_OWNER_VK_IDS", "ADMIN_VK_IDS"),
+    )
+    role_notification_poll_interval_seconds: int = 2
+    role_notification_max_attempts: int = 10
+    role_notification_lock_timeout_seconds: int = 300
+    role_notification_retry_base_seconds: int = 5
+    role_notification_retry_max_seconds: int = 900
     sync_queue_poll_interval_seconds: int = 5
     sync_queue_max_attempts: int = 10
     sync_queue_batch_size: int = 20
