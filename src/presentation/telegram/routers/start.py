@@ -51,7 +51,7 @@ async def start(
             reply_markup=main_menu_keyboard(is_starosta=registration.is_starosta),
         )
         return
-    students = await list_students(ListAvailableStudentsQuery())
+    students = await list_students(ListAvailableStudentsQuery(provider=IdentityProvider.TELEGRAM))
     await _show_available_students(message, students)
 
 
@@ -64,7 +64,7 @@ async def select_student(
     if not isinstance(callback.message, Message):
         await callback.answer()
         return
-    students = await list_students(ListAvailableStudentsQuery())
+    students = await list_students(ListAvailableStudentsQuery(provider=IdentityProvider.TELEGRAM))
     student = _find_available_student(callback_data.student_id, students)
     if student is None:
         await callback.answer("Эта запись уже занята, обновляю список", show_alert=True)
@@ -127,7 +127,7 @@ async def cancel_registration(
     list_students: FromDishka[ListAvailableStudentsHandler],
 ) -> None:
     if isinstance(callback.message, Message):
-        students = await list_students(ListAvailableStudentsQuery())
+        students = await list_students(ListAvailableStudentsQuery(provider=IdentityProvider.TELEGRAM))
         await _show_available_students(callback.message, students, edit=True)
     await callback.answer()
 

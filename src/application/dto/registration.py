@@ -17,3 +17,10 @@ class UnlinkRegistrationCommand:
     registration_id: UUID
     admin_provider: IdentityProvider
     admin_external_user_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class UnlinkStudentAccountsCommand:
+    student_id: UUID
+    admin_provider: IdentityProvider
+    admin_external_user_id: str

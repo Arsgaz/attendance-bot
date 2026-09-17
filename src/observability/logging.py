@@ -4,8 +4,15 @@ from typing import Any
 
 import structlog
 
+from observability.privacy import sanitize_event
 
-def configure_logging(*, service: str, level: str = "INFO") -> None:
+
+def configure_logging(
+    *,
+    service: str,
+    level: str = "INFO",
+    pseudonym_key: str = "local-development-only",
+) -> None:
     numeric_level = getattr(logging, level.upper(), logging.INFO)
 
     def add_service(
@@ -16,6 +23,14 @@ def configure_logging(*, service: str, level: str = "INFO") -> None:
         del logger, method_name
         event_dict.setdefault("service", service)
         return event_dict
+
+    def protect_sensitive_data(
+        logger: object,
+        method_name: str,
+        event_dict: dict[str, Any],
+    ) -> dict[str, Any]:
+        del logger, method_name
+        return sanitize_event(event_dict, pseudonym_key=pseudonym_key.encode())
 
     shared_processors = [
         add_service,
@@ -40,6 +55,7 @@ def configure_logging(*, service: str, level: str = "INFO") -> None:
             *shared_processors,
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
+            protect_sensitive_data,
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
         wrapper_class=structlog.stdlib.BoundLogger,

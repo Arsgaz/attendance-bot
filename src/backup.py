@@ -9,8 +9,26 @@ from pathlib import Path
 
 from config.settings import Settings
 from observability import configure_logging, get_logger
+from observability.heartbeat import heartbeat_path, write_heartbeat
 
 logger = get_logger(__name__)
+
+
+def _remove_sqlite_files(path: Path) -> None:
+    """Remove a temporary SQLite database together with its journal sidecars."""
+    for suffix in ("", "-wal", "-shm", "-journal"):
+        Path(f"{path}{suffix}").unlink(missing_ok=True)
+
+
+def cleanup_stale_temporary_files(backup_dir: Path) -> list[Path]:
+    """Remove leftovers from an interrupted or older backup implementation."""
+    removed: list[Path] = []
+    for pattern in (".*.sqlite3.tmp*", ".*.sqlite3.gz.tmp"):
+        for path in backup_dir.glob(pattern):
+            if path.is_file():
+                path.unlink()
+                removed.append(path)
+    return removed
 
 
 def sqlite_path(database_url: str) -> Path:
@@ -58,7 +76,7 @@ def create_backup(
         os.replace(compressed, target)
         return target
     finally:
-        snapshot.unlink(missing_ok=True)
+        _remove_sqlite_files(snapshot)
         compressed.unlink(missing_ok=True)
 
 
@@ -82,12 +100,29 @@ def rotate_backups(backup_dir: Path, *, daily: int, weekly: int) -> list[Path]:
     return removed
 
 
+def seconds_until_next_backup(
+    backup_dir: Path,
+    *,
+    interval_seconds: int,
+    now: float | None = None,
+) -> float:
+    latest = max(
+        backup_dir.glob("attendance-*.sqlite3.gz"),
+        key=lambda path: path.stat().st_mtime,
+        default=None,
+    )
+    if latest is None:
+        return 0.0
+    elapsed = (time.time() if now is None else now) - latest.stat().st_mtime
+    return max(0.0, interval_seconds - elapsed)
+
+
 def restore_backup(database: Path, archive: Path, backup_dir: Path) -> Path:
     if not archive.is_file():
         raise FileNotFoundError(archive)
     database.parent.mkdir(parents=True, exist_ok=True)
     restored = database.with_name(f".{database.name}.restore.tmp")
-    restored.unlink(missing_ok=True)
+    _remove_sqlite_files(restored)
     try:
         with gzip.open(archive, "rb") as source, restored.open("wb") as destination:
             shutil.copyfileobj(source, destination)
@@ -99,7 +134,7 @@ def restore_backup(database: Path, archive: Path, backup_dir: Path) -> Path:
         verify_database(database)
         return emergency
     finally:
-        restored.unlink(missing_ok=True)
+        _remove_sqlite_files(restored)
 
 
 def _backup_datetime(path: Path) -> datetime | None:
@@ -113,13 +148,19 @@ def _backup_datetime(path: Path) -> datetime | None:
 def _create_and_rotate(settings: Settings) -> Path:
     database = sqlite_path(settings.database_url)
     backup_dir = Path(settings.backup_dir).resolve()
+    stale = cleanup_stale_temporary_files(backup_dir)
     result = create_backup(database, backup_dir)
     removed = rotate_backups(
         backup_dir,
         daily=settings.backup_daily_retention,
         weekly=settings.backup_weekly_retention,
     )
-    logger.info("backup_created", archive=str(result), rotated=len(removed))
+    logger.info(
+        "backup_created",
+        archive=str(result),
+        rotated=len(removed),
+        stale_temporary_files_removed=len(stale),
+    )
     return result
 
 
@@ -131,7 +172,12 @@ def main() -> None:
     parser.add_argument("--yes", action="store_true", help="confirm destructive restore")
     args = parser.parse_args()
     settings = Settings()  # type: ignore[call-arg]
-    configure_logging(service="backup", level=settings.log_level)
+    configure_logging(
+        service="backup",
+        level=settings.log_level,
+        pseudonym_key=settings.observability_hash_key.get_secret_value(),
+    )
+    backup_heartbeat = heartbeat_path(settings.healthcheck_heartbeat_dir, "backup")
     if args.restore is not None:
         if not args.yes:
             parser.error("--restore requires --yes; stop bot and worker before restoring")
@@ -147,8 +193,18 @@ def main() -> None:
         )
         return
     while True:
+        if args.loop:
+            delay = seconds_until_next_backup(
+                Path(settings.backup_dir).resolve(),
+                interval_seconds=settings.backup_interval_seconds,
+            )
+            if delay > 0:
+                write_heartbeat(backup_heartbeat)
+                time.sleep(delay)
+                continue
         try:
             _create_and_rotate(settings)
+            write_heartbeat(backup_heartbeat)
         except Exception:
             logger.exception("backup_failed")
             if not args.loop:

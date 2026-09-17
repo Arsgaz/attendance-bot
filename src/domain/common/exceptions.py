@@ -18,7 +18,7 @@ class BonusLimitExceededError(DomainError):
     pass
 
 
-class BonusRequestNotFoundError(DomainError):
+class AttendanceRequestNotFoundError(DomainError):
     pass
 
 

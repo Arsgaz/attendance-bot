@@ -9,14 +9,14 @@ from adapter.database.models.base import Base
 from adapter.database.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 
-class BonusRequestStatus(StrEnum):
+class AttendanceRequestStatus(StrEnum):
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
 
 
-class BonusRequestModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    __tablename__ = "bonus_requests"
+class AttendanceRequestModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "attendance_requests"
 
     student_id: Mapped[UUID] = mapped_column(ForeignKey("students.id", ondelete="RESTRICT"))
     lesson_id: Mapped[UUID] = mapped_column(ForeignKey("lessons.id", ondelete="RESTRICT"))
@@ -28,9 +28,9 @@ class BonusRequestModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     comment: Mapped[str | None] = mapped_column(Text)
 
     __table_args__ = (
-        UniqueConstraint("student_id", "lesson_id", name="uq_bonus_requests_student_lesson"),
+        UniqueConstraint("student_id", "lesson_id", name="uq_attendance_requests_student_lesson"),
         CheckConstraint(
             "status IN ('pending', 'approved', 'rejected')",
-            name="ck_bonus_requests_status",
+            name="ck_attendance_requests_status",
         ),
     )

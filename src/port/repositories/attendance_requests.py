@@ -7,7 +7,7 @@ from domain.vo.attendance_status import AttendanceStatus
 
 
 @dataclass(frozen=True, slots=True)
-class BonusRequestView:
+class AttendanceRequestView:
     id: UUID
     student_id: UUID
     student_name: str
@@ -19,7 +19,7 @@ class BonusRequestView:
     status: str
 
 
-class BonusRequestRepository(Protocol):
+class AttendanceRequestRepository(Protocol):
     async def create_or_reopen(
         self,
         *,
@@ -29,11 +29,11 @@ class BonusRequestRepository(Protocol):
         requested_status: AttendanceStatus,
         reason: str | None,
         now: datetime,
-    ) -> BonusRequestView: ...
+    ) -> AttendanceRequestView: ...
 
-    async def get(self, request_id: UUID) -> BonusRequestView | None: ...
+    async def get(self, request_id: UUID) -> AttendanceRequestView | None: ...
 
-    async def list_pending(self) -> list[BonusRequestView]: ...
+    async def list_pending(self) -> list[AttendanceRequestView]: ...
 
     async def decide(
         self,

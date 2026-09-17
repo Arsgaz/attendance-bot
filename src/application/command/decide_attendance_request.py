@@ -6,14 +6,14 @@ from application.base_interactor import Interactor
 from application.common.week import week_bounds
 from domain.attendance.entity import Attendance
 from domain.attendance.policies import BonusEligibilityPolicy
-from domain.common.exceptions import AttendanceAlreadyExistsError, BonusRequestNotFoundError
+from domain.common.exceptions import AttendanceAlreadyExistsError, AttendanceRequestNotFoundError
 from domain.vo.actor import Actor
 from domain.vo.attendance_status import AttendanceStatus
 from observability import get_logger
 from port.clock import Clock
 from port.id_generator import IdGenerator
 from port.repositories.attendance import AttendanceHistoryRepository, AttendanceRepository
-from port.repositories.bonus_requests import BonusRequestRepository
+from port.repositories.attendance_requests import AttendanceRequestRepository
 from port.repositories.lessons import LessonRepository
 from port.repositories.registration import RegistrationRepository
 from port.repositories.sheet_sync_queue import SheetSyncQueueRepository
@@ -30,7 +30,7 @@ class DecideAttendanceRequestCommand:
 
 
 class DecideAttendanceRequestHandler(Interactor[DecideAttendanceRequestCommand, None]):
-    def __init__(self, *, requests: BonusRequestRepository,
+    def __init__(self, *, requests: AttendanceRequestRepository,
                  registrations: RegistrationRepository, lessons: LessonRepository,
                  attendance: AttendanceRepository, history: AttendanceHistoryRepository,
                  sync_queue: SheetSyncQueueRepository, uow: UnitOfWork, clock: Clock,
@@ -56,13 +56,13 @@ class DecideAttendanceRequestHandler(Interactor[DecideAttendanceRequestCommand, 
             raise PermissionError("starosta role required")
         request = await self._requests.get(command.request_id)
         if request is None or request.status != "pending":
-            raise BonusRequestNotFoundError
+            raise AttendanceRequestNotFoundError
         now = self._clock.now()
         try:
             if command.approved:
                 lesson = await self._lessons.get(request.lesson_id)
                 if lesson is None:
-                    raise BonusRequestNotFoundError
+                    raise AttendanceRequestNotFoundError
                 existing = await self._attendance.get_for_student_lesson(
                     student_id=request.student_id, lesson_id=request.lesson_id,
                 )

@@ -30,9 +30,18 @@ class UnlinkRegistrationHandler(Interactor[UnlinkRegistrationCommand, None]):
             command.admin_external_user_id,
         ):
             raise RegistrationAdminActionForbiddenError
+        admin_registration = await self._repository.get_active_by_external_id(
+            command.admin_provider,
+            command.admin_external_user_id,
+        )
         registration = await self._repository.get(command.registration_id)
         if registration is None:
             raise RegistrationNotFoundError
+        if (
+            admin_registration is not None
+            and registration.student_id == admin_registration.student_id
+        ):
+            raise RegistrationAdminActionForbiddenError
         registration.unlink(now=self._clock.now())
         try:
             await self._repository.save(registration)

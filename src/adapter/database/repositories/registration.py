@@ -1,3 +1,4 @@
+from collections.abc import Mapping, Set
 from uuid import UUID
 
 from sqlalchemy import exists, select
@@ -13,13 +14,18 @@ ACTIVE_STATUS = RegistrationStatus.APPROVED.value
 
 
 class SQLAlchemyRegistrationRepository:
-    def __init__(self, session: AsyncSession, admin_telegram_ids: set[int] | None = None) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        bootstrap_admin_ids: Mapping[IdentityProvider, Set[str]] | None = None,
+    ) -> None:
         self._session = session
-        self._admin_telegram_ids = admin_telegram_ids or set()
+        self._bootstrap_admin_ids = bootstrap_admin_ids or {}
 
-    async def list_available_students(self) -> list[StudentChoice]:
+    async def list_available_students(self, provider: IdentityProvider) -> list[StudentChoice]:
         active_account = exists().where(
             ExternalAccountModel.student_id == StudentModel.id,
+            ExternalAccountModel.provider == provider.value,
             ExternalAccountModel.status == ACTIVE_STATUS,
         )
         statement = (
@@ -52,6 +58,13 @@ class SQLAlchemyRegistrationRepository:
             )
         return result
 
+    async def list_active_for_student(self, student_id: UUID) -> list[Registration]:
+        statement = select(ExternalAccountModel).where(
+            ExternalAccountModel.student_id == student_id,
+            ExternalAccountModel.status == ACTIVE_STATUS,
+        )
+        return [registration_to_domain(model) for model in await self._session.scalars(statement)]
+
     async def list_starosta_external_ids(self, provider: IdentityProvider) -> list[str]:
         statement = (
             select(ExternalAccountModel.external_user_id)
@@ -64,8 +77,7 @@ class SQLAlchemyRegistrationRepository:
             )
         )
         result = set(await self._session.scalars(statement))
-        if provider is IdentityProvider.TELEGRAM:
-            result.update(str(value) for value in self._admin_telegram_ids)
+        result.update(self._bootstrap_admin_ids.get(provider, set()))
         return sorted(result)
 
     async def get_active_by_external_id(
@@ -97,13 +109,18 @@ class SQLAlchemyRegistrationRepository:
         model = await self._session.get(ExternalAccountModel, registration_id)
         return registration_to_domain(model) if model is not None else None
 
-    async def is_student_available(self, student_id: UUID) -> bool:
+    async def is_student_available(
+        self,
+        student_id: UUID,
+        provider: IdentityProvider,
+    ) -> bool:
         statement = select(
             exists().where(
                 StudentModel.id == student_id,
                 StudentModel.is_active,
                 ~exists().where(
                     ExternalAccountModel.student_id == student_id,
+                    ExternalAccountModel.provider == provider.value,
                     ExternalAccountModel.status == ACTIVE_STATUS,
                 ),
             ),
@@ -115,11 +132,7 @@ class SQLAlchemyRegistrationRepository:
         provider: IdentityProvider,
         external_user_id: str,
     ) -> bool:
-        if (
-            provider is IdentityProvider.TELEGRAM
-            and external_user_id.isdigit()
-            and int(external_user_id) in self._admin_telegram_ids
-        ):
+        if external_user_id in self._bootstrap_admin_ids.get(provider, set()):
             return True
         statement = select(
             exists().where(

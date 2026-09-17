@@ -1,12 +1,13 @@
 from dataclasses import dataclass
 
 from application.base_interactor import Interactor
+from domain.vo.actor import IdentityProvider
 from port.repositories.registration import RegistrationRepository, StudentChoice
 
 
 @dataclass(frozen=True, slots=True)
 class ListAvailableStudentsQuery:
-    pass
+    provider: IdentityProvider
 
 
 class ListAvailableStudentsHandler(Interactor[ListAvailableStudentsQuery, list[StudentChoice]]):
@@ -14,5 +15,4 @@ class ListAvailableStudentsHandler(Interactor[ListAvailableStudentsQuery, list[S
         self._repository = repository
 
     async def __call__(self, query: ListAvailableStudentsQuery) -> list[StudentChoice]:
-        del query
-        return await self._repository.list_available_students()
+        return await self._repository.list_available_students(query.provider)

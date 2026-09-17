@@ -37,7 +37,7 @@ class RegisterStudentHandler(Interactor[RegisterStudentCommand, Registration]):
             is not None
         ):
             raise ActiveRegistrationExistsError
-        if not await self._repository.is_student_available(command.student_id):
+        if not await self._repository.is_student_available(command.student_id, command.provider):
             raise StudentNotAvailableError
         registration = Registration.register(
             registration_id=self._ids.new(),

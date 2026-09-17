@@ -10,13 +10,23 @@ from adapter.database.repositories import SQLAlchemyRegistrationRepository
 from adapter.database.uow import SQLAlchemyUnitOfWork
 from application.command.register_student import RegisterStudentHandler
 from application.command.unlink_registration import UnlinkRegistrationHandler
-from application.dto.registration import RegisterStudentCommand, UnlinkRegistrationCommand
-from application.exceptions.registration import ActiveRegistrationExistsError
+from application.command.unlink_student_accounts import UnlinkStudentAccountsHandler
+from application.dto.registration import (
+    RegisterStudentCommand,
+    UnlinkRegistrationCommand,
+    UnlinkStudentAccountsCommand,
+)
+from application.exceptions.registration import (
+    ActiveRegistrationExistsError,
+    RegistrationAdminActionForbiddenError,
+)
 from application.query import (
     GetMyRegistrationHandler,
     GetMyRegistrationQuery,
     ListAvailableStudentsHandler,
     ListAvailableStudentsQuery,
+    ListLinkedStudentsHandler,
+    ListLinkedStudentsQuery,
 )
 from domain.registration import RegistrationStatus
 from domain.vo.actor import IdentityProvider
@@ -44,6 +54,7 @@ async def test_immediate_registration_and_admin_unlink_flow(tmp_path: Path) -> N
     now = datetime(2026, 9, 16, 12, tzinfo=UTC)
     student_id = uuid4()
     starosta_id = uuid4()
+    starosta_registration_id = uuid4()
     vk_student_id = uuid4()
     registration_id = uuid4()
     try:
@@ -80,7 +91,7 @@ async def test_immediate_registration_and_admin_unlink_flow(tmp_path: Path) -> N
                         updated_at=now,
                     ),
                     ExternalAccountModel(
-                        id=uuid4(),
+                        id=starosta_registration_id,
                         student_id=starosta_id,
                         provider=IdentityProvider.TELEGRAM.value,
                         external_user_id="100",
@@ -101,7 +112,9 @@ async def test_immediate_registration_and_admin_unlink_flow(tmp_path: Path) -> N
 
         async with session_factory() as session:
             repository = SQLAlchemyRegistrationRepository(session)
-            available = await ListAvailableStudentsHandler(repository)(ListAvailableStudentsQuery())
+            available = await ListAvailableStudentsHandler(repository)(ListAvailableStudentsQuery(
+                provider=IdentityProvider.TELEGRAM,
+            ))
             assert [item.id for item in available] == [student_id, vk_student_id]
             register = RegisterStudentHandler(
                 repository=repository,
@@ -118,6 +131,11 @@ async def test_immediate_registration_and_admin_unlink_flow(tmp_path: Path) -> N
                 ),
             )
             assert registration.status is RegistrationStatus.APPROVED
+
+            vk_available = await ListAvailableStudentsHandler(repository)(
+                ListAvailableStudentsQuery(provider=IdentityProvider.VK),
+            )
+            assert student_id in {item.id for item in vk_available}
 
             with pytest.raises(ActiveRegistrationExistsError):
                 await register(
@@ -137,7 +155,7 @@ async def test_immediate_registration_and_admin_unlink_flow(tmp_path: Path) -> N
             )
             await vk_registration(
                 RegisterStudentCommand(
-                    student_id=vk_student_id,
+                    student_id=student_id,
                     provider=IdentityProvider.VK,
                     external_user_id="42",
                     username="vk-student",
@@ -146,6 +164,15 @@ async def test_immediate_registration_and_admin_unlink_flow(tmp_path: Path) -> N
 
         async with session_factory() as session:
             repository = SQLAlchemyRegistrationRepository(session)
+            linked = await ListLinkedStudentsHandler(repository)(ListLinkedStudentsQuery(
+                provider=IdentityProvider.TELEGRAM,
+                external_user_id="100",
+            ))
+            linked_student = next(item for item in linked if item.student_id == student_id)
+            assert {account.provider for account in linked_student.accounts} == {
+                IdentityProvider.TELEGRAM,
+                IdentityProvider.VK,
+            }
             active = await GetMyRegistrationHandler(repository)(GetMyRegistrationQuery(
                 provider=IdentityProvider.TELEGRAM,
                 external_user_id="42",
@@ -171,11 +198,71 @@ async def test_immediate_registration_and_admin_unlink_flow(tmp_path: Path) -> N
                 provider=IdentityProvider.TELEGRAM,
                 external_user_id="42",
             )) is None
-            available = await ListAvailableStudentsHandler(repository)(ListAvailableStudentsQuery())
-            assert [item.id for item in available] == [student_id]
+            available = await ListAvailableStudentsHandler(repository)(ListAvailableStudentsQuery(
+                provider=IdentityProvider.TELEGRAM,
+            ))
+            assert [item.id for item in available] == [student_id, vk_student_id]
+            vk_available = await ListAvailableStudentsHandler(repository)(
+                ListAvailableStudentsQuery(provider=IdentityProvider.VK),
+            )
+            assert {item.id for item in vk_available} == {starosta_id, vk_student_id}
             assert await GetMyRegistrationHandler(repository)(GetMyRegistrationQuery(
                 provider=IdentityProvider.VK,
                 external_user_id="42",
             )) is not None
+
+            unlink_all = UnlinkStudentAccountsHandler(
+                repository=repository,
+                uow=SQLAlchemyUnitOfWork(session),
+                clock=FixedClock(now),
+            )
+            await unlink_all(UnlinkStudentAccountsCommand(
+                student_id=student_id,
+                admin_provider=IdentityProvider.TELEGRAM,
+                admin_external_user_id="100",
+            ))
+            assert await GetMyRegistrationHandler(repository)(GetMyRegistrationQuery(
+                provider=IdentityProvider.VK,
+                external_user_id="42",
+            )) is None
+
+            with pytest.raises(RegistrationAdminActionForbiddenError):
+                await unlink_all(UnlinkStudentAccountsCommand(
+                    student_id=starosta_id,
+                    admin_provider=IdentityProvider.TELEGRAM,
+                    admin_external_user_id="100",
+                ))
+            with pytest.raises(RegistrationAdminActionForbiddenError):
+                await UnlinkRegistrationHandler(
+                    repository=repository,
+                    uow=SQLAlchemyUnitOfWork(session),
+                    clock=FixedClock(now),
+                )(UnlinkRegistrationCommand(
+                    registration_id=starosta_registration_id,
+                    admin_provider=IdentityProvider.TELEGRAM,
+                    admin_external_user_id="100",
+                ))
+    finally:
+        await engine.dispose()
+
+
+async def test_bootstrap_admins_are_provider_specific(tmp_path: Path) -> None:
+    engine = create_engine(f"sqlite+aiosqlite:///{tmp_path / 'admins.sqlite3'}")
+    session_factory = create_session_factory(engine)
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        async with session_factory() as session:
+            repository = SQLAlchemyRegistrationRepository(
+                session,
+                {
+                    IdentityProvider.TELEGRAM: {"100"},
+                    IdentityProvider.VK: {"200"},
+                },
+            )
+            assert await repository.is_starosta(IdentityProvider.TELEGRAM, "100")
+            assert await repository.is_starosta(IdentityProvider.VK, "200")
+            assert not await repository.is_starosta(IdentityProvider.TELEGRAM, "200")
+            assert not await repository.is_starosta(IdentityProvider.VK, "100")
     finally:
         await engine.dispose()

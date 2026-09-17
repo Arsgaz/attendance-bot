@@ -52,10 +52,26 @@ class ConfirmDeleteAttendanceCallback(CallbackData, prefix="confirm_delete"):
     attendance_id: str
 
 
-class BonusDecisionCallback(CallbackData, prefix="bonus_decide"):
+class AttendanceRequestDecisionCallback(CallbackData, prefix="attendance_request_decide"):
     request_id: str
     approve: int
 
 
 class UnlinkAccountCallback(CallbackData, prefix="unlink_account"):
     registration_id: str
+
+
+class ConfirmUnlinkAccountCallback(CallbackData, prefix="confirm_unlink_account"):
+    registration_id: str
+
+
+class StudentAccountsCallback(CallbackData, prefix="student_accounts"):
+    student_id: str
+
+
+class UnlinkAllStudentAccountsCallback(CallbackData, prefix="unlink_all_accounts"):
+    student_id: str
+
+
+class ConfirmUnlinkAllStudentAccountsCallback(CallbackData, prefix="confirm_unlink_all"):
+    student_id: str

@@ -23,8 +23,16 @@ class GoogleApiSheetsValuesClient:
 
     def __init__(self, *, spreadsheet_id: str, service: Any) -> None:
         self._spreadsheet_id = spreadsheet_id
+        self._service = service
         self._spreadsheets = service.spreadsheets()
         self._values = service.spreadsheets().values()
+
+    def close(self) -> None:
+        """Release sockets owned by the google-api-python-client transport."""
+        http = getattr(self._service, "_http", None)
+        close = getattr(http, "close", None)
+        if callable(close):
+            close()
 
     @classmethod
     def from_service_account_file(

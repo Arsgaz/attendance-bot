@@ -11,6 +11,11 @@ x-app: &app
     - ./backups:/backups
     - ./secrets:/app/secrets:ro
   init: true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
 
 services:
   migrate:
@@ -18,13 +23,33 @@ services:
     command: ["alembic", "upgrade", "head"]
     restart: "no"
 
-  bot:
+  telegram-bot:
     <<: *app
-    command: ["python", "-m", "main"]
+    command: ["python", "-m", "telegram_main"]
     depends_on:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-m", "observability.healthcheck", "--service", "telegram-bot"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  vk-bot:
+    <<: *app
+    command: ["python", "-m", "vk_main"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-m", "observability.healthcheck", "--service", "vk-bot"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   worker:
     <<: *app
@@ -33,6 +58,12 @@ services:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-m", "observability.healthcheck", "--service", "worker"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   backup:
     <<: *app
@@ -41,3 +72,9 @@ services:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-m", "observability.healthcheck", "--service", "backup"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

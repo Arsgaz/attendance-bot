@@ -1,11 +1,17 @@
-from pydantic import Field, SecretStr
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    bot_token: SecretStr = SecretStr("")
+    telegram_bot_token: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias=AliasChoices("TELEGRAM_BOT_TOKEN", "BOT_TOKEN"),
+    )
+    vk_bot_token: SecretStr = SecretStr("")
+    vk_group_id: int = 0
+    vk_api_version: str = "5.199"
     database_url: str = "sqlite+aiosqlite:///./attendance.db"
     google_spreadsheet_id: str = ""
     google_sheet_name: str = "Журнал"
@@ -20,6 +26,7 @@ class Settings(BaseSettings):
     default_timezone: str = "Europe/Moscow"
     bonus_weekly_limit: int = 3
     admin_telegram_ids: list[int] = Field(default_factory=list)
+    admin_vk_ids: list[int] = Field(default_factory=list)
     sync_queue_poll_interval_seconds: int = 5
     sync_queue_max_attempts: int = 10
     sync_queue_batch_size: int = 20
@@ -31,4 +38,6 @@ class Settings(BaseSettings):
     backup_interval_seconds: int = 86400
     backup_daily_retention: int = 7
     backup_weekly_retention: int = 4
+    healthcheck_heartbeat_dir: str = "/tmp/attendance-health"
+    observability_hash_key: SecretStr = SecretStr("local-development-only")
     log_level: str = "INFO"

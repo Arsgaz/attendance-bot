@@ -11,7 +11,17 @@ class SheetSyncTask:
     attempts: int
 
 
+@dataclass(frozen=True, slots=True)
+class SheetSyncQueueSnapshot:
+    pending: int
+    processing: int
+    failed: int
+    oldest_task_at: datetime | None
+
+
 class SheetSyncQueueRepository(Protocol):
+    async def snapshot(self) -> SheetSyncQueueSnapshot: ...
+
     async def upsert(
         self,
         *,

@@ -17,4 +17,4 @@ COPY alembic.ini ./
 COPY migrations ./migrations
 COPY src ./src
 
-CMD ["python", "-m", "main"]
+CMD ["python", "-m", "telegram_main"]

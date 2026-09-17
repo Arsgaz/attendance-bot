@@ -1,4 +1,5 @@
 import ast
+import importlib
 from pathlib import Path
 
 SRC = Path(__file__).parents[2] / "src"
@@ -60,3 +61,8 @@ def test_presentation_support_modules_do_not_hide_use_case_calls() -> None:
             if module.partition(".")[0] == "application":
                 violations.append(f"{path.relative_to(SRC)} -> {module}")
     assert not violations, "Support modules must stay presentation-only:\n" + "\n".join(violations)
+
+
+def test_client_entrypoints_can_be_imported() -> None:
+    importlib.import_module("telegram_main")
+    importlib.import_module("vk_main")

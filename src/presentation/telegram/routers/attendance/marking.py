@@ -1,7 +1,7 @@
 from datetime import date
 from uuid import UUID
 
-from aiogram import Bot, F, Router
+from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from dishka.integrations.aiogram import FromDishka
@@ -11,6 +11,10 @@ from application.command.create_attendance_request import (
     CreateAttendanceRequestHandler,
 )
 from application.command.mark_attendance import MarkAttendanceHandler
+from application.command.notify_attendance_request import (
+    NotifyAttendanceRequestCommand,
+    NotifyAttendanceRequestHandler,
+)
 from application.dto.attendance import MarkAttendanceCommand
 from application.query import (
     GetMyRegistrationHandler,
@@ -19,8 +23,6 @@ from application.query import (
     ListAttendanceDatesQuery,
     ListLessonsForDateHandler,
     ListLessonsForDateQuery,
-    ListStarostaExternalIdsHandler,
-    ListStarostaExternalIdsQuery,
 )
 from domain.common.exceptions import (
     AttendanceAlreadyExistsError,
@@ -44,9 +46,6 @@ from presentation.telegram.keyboards import (
 )
 from presentation.telegram.routers.attendance.support import (
     attendance_dates_week_title as _attendance_dates_week_title,
-)
-from presentation.telegram.routers.attendance.support import (
-    notify_starostas as _notify_starostas,
 )
 from presentation.telegram.states import ExcusedRequestState
 
@@ -178,8 +177,7 @@ async def submit_excused_reason(
     state: FSMContext,
     get_registration: FromDishka[GetMyRegistrationHandler],
     create_request: FromDishka[CreateAttendanceRequestHandler],
-    list_starostas: FromDishka[ListStarostaExternalIdsHandler],
-    bot: Bot,
+    notify_request: FromDishka[NotifyAttendanceRequestHandler],
 ) -> None:
     reason = (message.text or "").strip()
     if len(reason) < 5:
@@ -217,10 +215,10 @@ async def submit_excused_reason(
         await state.clear()
         await message.answer("Заявку для этого занятия создать нельзя")
         return
-    starosta_ids = await list_starostas(ListStarostaExternalIdsQuery(
+    await notify_request(NotifyAttendanceRequestCommand(
+        request_id=request.id,
         provider=IdentityProvider.TELEGRAM,
     ))
-    await _notify_starostas(bot, starosta_ids, request)
     await state.clear()
     await message.answer("Заявка на «У» отправлена старосте")
 
@@ -231,9 +229,8 @@ async def save_attendance(
     callback_data: ConfirmAttendanceCallback,
     get_registration: FromDishka[GetMyRegistrationHandler],
     mark_attendance: FromDishka[MarkAttendanceHandler],
-    create_bonus_request: FromDishka[CreateAttendanceRequestHandler],
-    list_starostas: FromDishka[ListStarostaExternalIdsHandler],
-    bot: Bot,
+    create_attendance_request: FromDishka[CreateAttendanceRequestHandler],
+    notify_request: FromDishka[NotifyAttendanceRequestHandler],
 ) -> None:
     registration = await get_registration(GetMyRegistrationQuery(
         provider=IdentityProvider.TELEGRAM,
@@ -250,16 +247,16 @@ async def save_attendance(
         return
     try:
         if status is AttendanceStatus.BONUS:
-            request = await create_bonus_request(CreateAttendanceRequestCommand(
+            request = await create_attendance_request(CreateAttendanceRequestCommand(
                 student_id=registration.student_id,
                 subgroup=registration.student_subgroup,
                 lesson_id=lesson_id,
                 requested_status=status,
             ))
-            starosta_ids = await list_starostas(ListStarostaExternalIdsQuery(
+            await notify_request(NotifyAttendanceRequestCommand(
+                request_id=request.id,
                 provider=IdentityProvider.TELEGRAM,
             ))
-            await _notify_starostas(bot, starosta_ids, request)
             await callback.message.edit_text(
                 f"Заявка на «{status.display_symbol}» отправлена старосте",
             )

@@ -14,6 +14,11 @@ from application.query.list_available_students import (
     ListAvailableStudentsHandler,
     ListAvailableStudentsQuery,
 )
+from application.query.list_linked_students import (
+    LinkedStudentView,
+    ListLinkedStudentsHandler,
+    ListLinkedStudentsQuery,
+)
 from application.query.list_my_attendance import ListMyAttendanceHandler, ListMyAttendanceQuery
 from application.query.list_pending_attendance_requests import (
     ListPendingAttendanceRequestsHandler,
@@ -28,6 +33,9 @@ __all__ = [
     "ListAttendanceDatesQuery",
     "ListActiveRegistrationsHandler",
     "ListActiveRegistrationsQuery",
+    "LinkedStudentView",
+    "ListLinkedStudentsHandler",
+    "ListLinkedStudentsQuery",
     "ListAvailableStudentsHandler",
     "ListAvailableStudentsQuery",
     "ListLessonsForDateHandler",

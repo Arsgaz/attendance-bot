@@ -87,6 +87,11 @@ async def test_upsert_keeps_one_task_with_latest_version(tmp_path: Path) -> None
             assert task.desired_version == 2
             assert task.attempts == 0
             assert task.status == "pending"
+            snapshot = await SQLAlchemySheetSyncQueueRepository(session).snapshot()
+            assert snapshot.pending == 1
+            assert snapshot.processing == 0
+            assert snapshot.failed == 0
+            assert snapshot.oldest_task_at is not None
 
         async with session_factory() as session:
             repository = SQLAlchemySheetSyncQueueRepository(session)
@@ -150,6 +155,10 @@ async def test_upsert_keeps_one_task_with_latest_version(tmp_path: Path) -> None
             assert task.status == "failed"
             assert task.attempts == 2
             repository = SQLAlchemySheetSyncQueueRepository(session)
+            snapshot = await repository.snapshot()
+            assert snapshot.pending == 0
+            assert snapshot.processing == 0
+            assert snapshot.failed == 1
             assert await repository.retry_failed(
                 attendance_id=attendance_id,
                 now=now + timedelta(seconds=8),

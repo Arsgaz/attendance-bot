@@ -42,8 +42,9 @@ class ExternalAccountModel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             postgresql_where=text("status = 'approved'"),
         ),
         Index(
-            "uq_external_accounts_active_student",
+            "uq_external_accounts_active_student_provider",
             "student_id",
+            "provider",
             unique=True,
             sqlite_where=text("status = 'approved'"),
             postgresql_where=text("status = 'approved'"),

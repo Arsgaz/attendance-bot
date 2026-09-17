@@ -1,18 +1,42 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import and_, case, delete, or_, select, update
+from sqlalchemy import and_, case, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from adapter.database.models import SheetSyncQueueModel, SyncStatus
-from port.repositories.sheet_sync_queue import SheetSyncTask
+from port.repositories.sheet_sync_queue import SheetSyncQueueSnapshot, SheetSyncTask
 
 
 class SQLAlchemySheetSyncQueueRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def snapshot(self) -> SheetSyncQueueSnapshot:
+        statement = select(
+            func.coalesce(
+                func.sum(case((SheetSyncQueueModel.status == SyncStatus.PENDING.value, 1), else_=0)),
+                0,
+            ),
+            func.coalesce(
+                func.sum(case((SheetSyncQueueModel.status == SyncStatus.PROCESSING.value, 1), else_=0)),
+                0,
+            ),
+            func.coalesce(
+                func.sum(case((SheetSyncQueueModel.status == SyncStatus.FAILED.value, 1), else_=0)),
+                0,
+            ),
+            func.min(SheetSyncQueueModel.updated_at),
+        )
+        pending, processing, failed, oldest_task_at = (await self._session.execute(statement)).one()
+        return SheetSyncQueueSnapshot(
+            pending=int(pending),
+            processing=int(processing),
+            failed=int(failed),
+            oldest_task_at=oldest_task_at,
+        )
 
     async def upsert(
         self,

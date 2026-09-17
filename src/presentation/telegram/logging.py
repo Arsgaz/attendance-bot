@@ -1,12 +1,11 @@
-import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 from aiogram import BaseMiddleware
 from aiogram.types import ErrorEvent, TelegramObject, Update
-from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from observability import get_logger
+from observability.context import client_operation
 
 logger = get_logger(__name__)
 
@@ -18,33 +17,34 @@ class UpdateLoggingMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: dict[str, Any],
     ) -> Any:
-        clear_contextvars()
-        started = time.monotonic()
-        if isinstance(event, Update):
-            bind_contextvars(
-                update_id=event.update_id,
-                telegram_user_id=_user_id(event),
-            )
-        logger.info("telegram_update_received")
-        try:
-            result = await handler(event, data)
+        update = event if isinstance(event, Update) else None
+        with client_operation(
+            provider="telegram",
+            external_user_id=_user_id(update) if update is not None else None,
+            external_update_id=update.update_id if update is not None else None,
+            operation="client.update",
+        ) as operation:
+            logger.info("client.update.received")
+            try:
+                result = await handler(event, data)
+            except Exception as error:
+                logger.exception(
+                    "client.update.failed",
+                    duration_ms=operation.duration_ms,
+                    error_type=type(error).__name__,
+                )
+                raise
             logger.info(
-                "telegram_update_processed",
-                duration_ms=round((time.monotonic() - started) * 1000),
+                "client.update.completed",
+                duration_ms=operation.duration_ms,
+                outcome="success",
             )
             return result
-        finally:
-            clear_contextvars()
 
 
 async def handle_telegram_error(event: ErrorEvent) -> bool:
     update = event.update
-    logger.exception(
-        "telegram_update_failed",
-        update_id=update.update_id,
-        telegram_user_id=_user_id(update),
-        exception=event.exception,
-    )
+    logger.info("client.error_response.sent", error_type=type(event.exception).__name__)
     message = update.message
     if message is not None:
         await message.answer("Произошла внутренняя ошибка, попробуйте ещё раз позднее")
@@ -56,7 +56,9 @@ async def handle_telegram_error(event: ErrorEvent) -> bool:
     return True
 
 
-def _user_id(update: Update) -> int | None:
+def _user_id(update: Update | None) -> int | None:
+    if update is None:
+        return None
     if update.message is not None and update.message.from_user is not None:
         return update.message.from_user.id
     if update.callback_query is not None:

@@ -64,5 +64,9 @@ async def run() -> None:
 
 if __name__ == "__main__":
     runtime_settings = Settings()  # type: ignore[call-arg]
-    configure_logging(service="import", level=runtime_settings.log_level)
+    configure_logging(
+        service="import",
+        level=runtime_settings.log_level,
+        pseudonym_key=runtime_settings.observability_hash_key.get_secret_value(),
+    )
     asyncio.run(run())

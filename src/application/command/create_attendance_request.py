@@ -2,14 +2,14 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from application.base_interactor import Interactor
-from domain.common.exceptions import AttendanceAlreadyExistsError, BonusRequestNotFoundError
+from domain.common.exceptions import AttendanceAlreadyExistsError, AttendanceRequestNotFoundError
 from domain.lesson.entity import Subgroup
 from domain.vo.attendance_status import AttendanceStatus
 from observability import get_logger
 from port.clock import Clock
 from port.id_generator import IdGenerator
 from port.repositories.attendance import AttendanceRepository
-from port.repositories.bonus_requests import BonusRequestRepository, BonusRequestView
+from port.repositories.attendance_requests import AttendanceRequestRepository, AttendanceRequestView
 from port.repositories.lessons import LessonRepository
 from port.unit_of_work import UnitOfWork
 
@@ -26,11 +26,11 @@ class CreateAttendanceRequestCommand:
 
 
 class CreateAttendanceRequestHandler(
-    Interactor[CreateAttendanceRequestCommand, BonusRequestView],
+    Interactor[CreateAttendanceRequestCommand, AttendanceRequestView],
 ):
     """Create a starosta-approval request for Б or У attendance."""
 
-    def __init__(self, *, requests: BonusRequestRepository, lessons: LessonRepository,
+    def __init__(self, *, requests: AttendanceRequestRepository, lessons: LessonRepository,
                  attendance: AttendanceRepository, uow: UnitOfWork, clock: Clock,
                  ids: IdGenerator) -> None:
         self._requests = requests
@@ -40,12 +40,12 @@ class CreateAttendanceRequestHandler(
         self._clock = clock
         self._ids = ids
 
-    async def __call__(self, command: CreateAttendanceRequestCommand) -> BonusRequestView:
+    async def __call__(self, command: CreateAttendanceRequestCommand) -> AttendanceRequestView:
         if command.requested_status is AttendanceStatus.EXCUSED and not (command.reason or "").strip():
             raise ValueError("excused attendance request requires a reason")
         lesson = await self._lessons.get(command.lesson_id)
         if lesson is None or not lesson.is_available_for(Subgroup(command.subgroup)):
-            raise BonusRequestNotFoundError
+            raise AttendanceRequestNotFoundError
         existing = await self._attendance.get_for_student_lesson(
             student_id=command.student_id, lesson_id=command.lesson_id,
         )

@@ -9,7 +9,7 @@ from adapter.database.engine import create_engine, create_session_factory
 from adapter.database.repositories import (
     SQLAlchemyAttendanceHistoryRepository,
     SQLAlchemyAttendanceRepository,
-    SQLAlchemyBonusRequestRepository,
+    SQLAlchemyAttendanceRequestRepository,
     SQLAlchemyLessonRepository,
     SQLAlchemySheetSyncQueueRepository,
 )
@@ -18,10 +18,11 @@ from adapter.database.uow import SQLAlchemyUnitOfWork
 from adapter.id_generator.uuid import UUIDGenerator
 from config.settings import Settings
 from domain.attendance.policies import BonusEligibilityPolicy
+from domain.vo.actor import IdentityProvider
 from port.clock import Clock
 from port.id_generator import IdGenerator
 from port.repositories.attendance import AttendanceHistoryRepository, AttendanceRepository
-from port.repositories.bonus_requests import BonusRequestRepository
+from port.repositories.attendance_requests import AttendanceRequestRepository
 from port.repositories.lessons import LessonRepository
 from port.repositories.registration import RegistrationRepository
 from port.repositories.sheet_sync_queue import SheetSyncQueueRepository
@@ -77,15 +78,21 @@ class RepositoryProvider(Provider):
         session: AsyncSession,
         settings: Settings,
     ) -> SQLAlchemyRegistrationRepository:
-        return SQLAlchemyRegistrationRepository(session, set(settings.admin_telegram_ids))
+        return SQLAlchemyRegistrationRepository(
+            session,
+            {
+                IdentityProvider.TELEGRAM: {str(value) for value in settings.admin_telegram_ids},
+                IdentityProvider.VK: {str(value) for value in settings.admin_vk_ids},
+            },
+        )
 
-    @provide(provides=BonusRequestRepository)
-    def bonus_requests(
+    @provide(provides=AttendanceRequestRepository)
+    def attendance_requests(
         self,
         session: AsyncSession,
         timezone: ZoneInfo,
-    ) -> SQLAlchemyBonusRequestRepository:
-        return SQLAlchemyBonusRequestRepository(session, timezone)
+    ) -> SQLAlchemyAttendanceRequestRepository:
+        return SQLAlchemyAttendanceRequestRepository(session, timezone)
 
     @provide(provides=UnitOfWork)
     def unit_of_work(self, session: AsyncSession) -> SQLAlchemyUnitOfWork:

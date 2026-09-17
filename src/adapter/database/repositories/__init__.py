@@ -2,7 +2,7 @@ from adapter.database.repositories.attendance import (
     SQLAlchemyAttendanceHistoryRepository,
     SQLAlchemyAttendanceRepository,
 )
-from adapter.database.repositories.bonus_requests import SQLAlchemyBonusRequestRepository
+from adapter.database.repositories.attendance_requests import SQLAlchemyAttendanceRequestRepository
 from adapter.database.repositories.lessons import SQLAlchemyLessonRepository
 from adapter.database.repositories.registration import SQLAlchemyRegistrationRepository
 from adapter.database.repositories.sheet_reconciliation import SQLAlchemySheetReconciliationRepository
@@ -13,7 +13,7 @@ from adapter.database.repositories.sheet_sync_queue import SQLAlchemySheetSyncQu
 __all__ = [
     "SQLAlchemyAttendanceHistoryRepository",
     "SQLAlchemyAttendanceRepository",
-    "SQLAlchemyBonusRequestRepository",
+    "SQLAlchemyAttendanceRequestRepository",
     "SQLAlchemyLessonRepository",
     "SQLAlchemyRegistrationRepository",
     "SQLAlchemySheetSyncDataRepository",
